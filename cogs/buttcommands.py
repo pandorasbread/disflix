@@ -1,3 +1,5 @@
+import datetime
+
 import discord
 from discord.abc import Messageable
 from discord.ext.commands import Cog
@@ -6,8 +8,17 @@ from discord.ext.commands import Bot
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 import os
+import base64
 import re
 
+#TODO: Poll options can't be longer than 55 characters
+#TODO: In/Out and nominations
+#TODO: What to do if a nomination is added when there's an active poll?
+#TODO: add rolling
+#TODO: add closing or deleting specific polls
+#TODO: do not forget https://discordpy.readthedocs.io/en/latest/api.html#discord.Poll
+#TODO: hook into the actual Help methods
+#TODO: do something for no actual nominations
 class ButtCommands(Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
@@ -54,25 +65,11 @@ class ButtCommands(Cog):
             #if command == '$roll':
             #if command == '$rollall':
             if command == '$poll' or command == '$vote':
-                movies = self.db["movies"].find({"nominated": True})
-                titles = [movie['title'] for movie in movies]
-                if len(titles) == 0:
-                    embed = discord.Embed(colour=discord.Colour.yellow(), title='', description='')
-                    embed.description = 'No active nominations!'
-                    return await msg.channel.send(embed=embed)
-                numvotes = '0'
-                if len(titles) <= 4:
-                    numvotes = '1'
-                elif len(titles) > 4 and len(titles) <= 7:
-                    numvotes = '2'
-                else:
-                    numvotes = '3'
-                result = discord.Poll(question='Which movie? ' + numvotes + ' vote(s)', multiple=len(titles) > 4, duration=48)
-                for title in titles:
-                    result.add_answer(text= title)
-                await msg.channel.send('test', poll=result)
+                await self.run_poll(msg)
 
-            #if command == '$endvote':
+            if command == '$endvote' or command == '$endpoll':
+                await self.end_poll(content == 'roll', msg)
+
             #if command == '$nominateminerandom':
             #if command == '$nominaterandom':
             if command == '$clear':
@@ -85,9 +82,11 @@ class ButtCommands(Cog):
                 embed.description += '`$delete` `movie_name`: Deletes `movie_name` from the movie database\n'
                 embed.description += '`$nominate` `movie_name` OR `$nom` `movie_name`: Nominates `movie_name` for movie night, also adds it to the database if it is not there.\n'
                 embed.description += '`$nominations` OR `$noms`: See current nominations.\n'
+                embed.description += '`$clear`: clears all nominations.\n'
                 embed.description += '`$withdraw` OR `$w`: Removes all your nominations from the next movie night list. \n'
                 embed.description += '`$withdraw` `movie_name` OR `$w` `movie_name`: Removes a specific nomination from the next movie night list. \n'
-                embed.description += '`$poll`: Does not work yet, should create a poll eventually.\n'
+                embed.description += '`$poll or $vote`: creates a poll.\n'
+                embed.description += '`$endpoll or $endvote`: ends a poll.\n'
                 embed.description += '`$out` and `$in`: change user status for movie night. Will be used to determine if movies that a user suggested should be hidden.\n'
                 await msg.channel.send(embed=embed)
 
@@ -105,16 +104,64 @@ class ButtCommands(Cog):
                 await msg.add_reaction('👁')
         except Exception as e:
             print(e)
+            await msg.channel.send('ERROR: '+str(e))
 
+    async def run_poll(self, msg: Message, tiebreaker: bool = False):
+        movies = self.db["movies"].find({"nominated": True})
+        titles = [movie['title'] for movie in movies]
+        duration = datetime.timedelta(hours=24)
+        if len(titles) == 0:
+            embed = discord.Embed(colour=discord.Colour.yellow(), title='', description='')
+            embed.description = 'No active nominations!'
+            return await msg.channel.send(embed=embed)
+        numvotes = '0'
+        if len(titles) <= 4:
+            numvotes = '1'
+        elif len(titles) > 4 and len(titles) <= 7:
+            numvotes = '2'
+        else:
+            numvotes = '3'
+
+        poll_code = base64.urlsafe_b64encode(os.urandom(6)).decode('ascii')
+        result = discord.Poll(question= 'TIEBREAKER! [Poll Code: `'+ poll_code + '`]' if tiebreaker else 'Which movie? ' + numvotes + ' vote(s) [Poll Code: `' + poll_code + '`]', multiple=len(titles) > 4 and not tiebreaker,
+                              duration=duration)
+        for title in titles:
+            result.add_answer(text=title)
+        sent_poll = await msg.channel.send(poll=result)
+
+        self.db['polls'].insert_one({'server_id': msg.guild.id, 'message_id': sent_poll.id, 'poll_time': datetime.datetime.now(tz=datetime.timezone.utc), 'poll_code':poll_code, 'open':True})
+
+    async def end_poll(self, roll: bool, msg: Message):
+        pollid = self.db['polls'].find_one({'server_id': msg.guild.id, 'poll_time': {"$lt": datetime.datetime.now(tz=datetime.timezone.utc)}, 'open': True}).get('message_id')
+        channel = await self.bot.fetch_channel(msg.channel.id)
+        pollmessage = await channel.fetch_message(pollid)
+        sortedlist = sorted(pollmessage.poll.answers, key=lambda a: a.vote_count, reverse=True)
+        winners = [answer for answer in sortedlist if answer.vote_count == sortedlist[0].vote_count]
+        if len(winners) == 1:
+            await msg.channel.send(winners[0].text + ' is the winner!')
+            self.db['movies'].update_one({'title': self.clean_case(winners[0].text)}, {'$set': {'last_win_date': datetime.datetime.today()}})
+            self.db['movies'].update_many({'nominated': True}, {'$set': {'nominated': False, 'nominator': None}})
+            self.db['polls'].update_one({'message_id': pollid}, {'$set': {'open':False}})
+            await pollmessage.poll.end()
+        else:
+            for answer in sortedlist:
+                if answer.vote_count != sortedlist[0].vote_count:
+                    self.db['movies'].update_one({'title': answer.text, 'nominated': True}, {'$set': {'nominated': False, 'nominator': None}})
+            self.db['polls'].update_one({'message_id': pollid}, {'$set': {'open': False}})
+            await pollmessage.poll.end()
+            await self.run_poll(msg, True)
 
     async def get_nominations(self, channel: Messageable):
         movies = self.db["movies"].find({"nominated": True})
-        titles = [movie['title'] for movie in movies]
+        titles = [[movie['title'], movie.get('last_win_date')] for movie in movies]
         msg = discord.Embed(colour=discord.Colour.yellow(), title='Current Nominations', description='')
         if len(titles) == 0:
             msg.description = 'No active nominations!'
         for title in titles:
-            msg.description += title + '\n'
+            msg.description += title[0]
+            if title[1] is not None:
+                msg.description += ' - won on ' + str(title[1].date())
+            msg.description += '\n'
             #msg.add_field(value= title)
         await channel.send(embed=msg)
 
@@ -129,6 +176,9 @@ class ButtCommands(Cog):
         else:
             self.check_user(msg.author)
             self.db["movies"].update_one({"title": self.clean_case(title)}, {"$set": {"nominated": True, "nominator": self.db["users"].find_one({"username": msg.author.id}).get('_id')}})
+            last_win = self.db['movies'].find_one({'title': self.clean_case(title)}).get('last_win_date')
+            if last_win is not None:
+                await msg.channel.send(title + ' won on ' + str(last_win.date()))
             await msg.add_reaction('🗳️')
 
 
@@ -162,7 +212,7 @@ class ButtCommands(Cog):
             await msg.channel.send('Movies can only be removed by the user who added them or the movie has already been deleted.')
 
     def clean_case(self, text: str):
-        return re.compile("^"+text+"$", re.IGNORECASE)
+        return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
 
 
 

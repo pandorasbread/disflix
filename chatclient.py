@@ -7,7 +7,8 @@ import os
 async def start_bot():
     intents = discord.Intents.default()
     intents.message_content = True
-    bot = Bot("$", intents=intents)
+    bot = Bot("$", intents=intents, max_messages=None)
+
 
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
