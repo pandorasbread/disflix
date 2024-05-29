@@ -13,12 +13,14 @@ import re
 
 #TODO: Poll options can't be longer than 55 characters
 #TODO: In/Out and nominations
-#TODO: What to do if a nomination is added when there's an active poll?
+#TODO: If a poll is active and a nomination is added, if there are no votes, then add the option. Same with withdrawing.
 #TODO: add rolling
 #TODO: add closing or deleting specific polls
-#TODO: do not forget https://discordpy.readthedocs.io/en/latest/api.html#discord.Poll
+#TODO: Always close active poll when new poll is called
 #TODO: hook into the actual Help methods
-#TODO: do something for no actual nominations
+#TODO: do something for making a poll with no active nominations
+#TODO: $mymovies
+#REMEMBER: do not forget https://discordpy.readthedocs.io/en/latest/api.html#discord.Poll
 class ButtCommands(Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
