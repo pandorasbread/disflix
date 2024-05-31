@@ -10,16 +10,16 @@ from dotenv import load_dotenv, find_dotenv
 import os
 import base64
 import re
+import random
 
-#TODO: Poll options can't be longer than 55 characters
-#TODO: In/Out and nominations
+#DONE: Poll options can't be longer than 55 characters
+#DONE: In/Out and nominations
 #TODO: If a poll is active and a nomination is added, if there are no votes, then add the option. Same with withdrawing.
 #TODO: add rolling
 #TODO: add closing or deleting specific polls
 #TODO: Always close active poll when new poll is called
-#TODO: hook into the actual Help methods
-#TODO: do something for making a poll with no active nominations
-#TODO: $mymovies
+#DONE: hook into the actual Help methods
+#DONE: $mymovies
 #REMEMBER: do not forget https://discordpy.readthedocs.io/en/latest/api.html#discord.Poll
 class ButtCommands(Cog):
     def __init__(self, bot: Bot):
@@ -75,25 +75,27 @@ class ButtCommands(Cog):
             if command == '$endvote' or command == '$endpoll':
                 await self.end_poll(content == 'roll', msg)
 
-            #if command == '$nominateminerandom':
+            if command == '$randomnom':
+                mymovies = self.get_my_movies(msg.author, True)
+                titles = [movie.get('title') for movie in mymovies]
+                if len(titles) == 0:
+                    await msg.channel.send('You have no movies left to nominate randomly.')
+                    return
+                randmovie = random.choice(titles)
+                await msg.channel.send('Nominating \'' + randmovie + '\'.')
+                await self.nominate_movie(randmovie, msg)
             #if command == '$nominaterandom':
             if command == '$clear':
                 self.db["movies"].update_many({"nominated": True}, {'$set': {"nominated": False, 'nominator': None}})
                 await msg.add_reaction('🧻')
             #if command == '$swap':
-            if command == '$moviehelp':
-                embed = discord.Embed(colour=discord.Colour.yellow(), title='halp', description='')
-                embed.description += '`$add` `movie_name`: Adds `movie_name` to the movie database\n'
-                embed.description += '`$delete` `movie_name`: Deletes `movie_name` from the movie database\n'
-                embed.description += '`$nominate` `movie_name` OR `$nom` `movie_name`: Nominates `movie_name` for movie night, also adds it to the database if it is not there.\n'
-                embed.description += '`$nominations` OR `$noms`: See current nominations.\n'
-                embed.description += '`$clear`: clears all nominations.\n'
-                embed.description += '`$withdraw` OR `$w`: Removes all your nominations from the next movie night list. \n'
-                embed.description += '`$withdraw` `movie_name` OR `$w` `movie_name`: Removes a specific nomination from the next movie night list. \n'
-                embed.description += '`$poll or $vote`: creates a poll.\n'
-                embed.description += '`$endpoll or $endvote`: ends a poll.\n'
-                embed.description += '`$out` and `$in`: change user status for movie night. Will be used to determine if movies that a user suggested should be hidden.\n'
+            if command == '$mymovies':
+                mymovies = self.get_my_movies(msg.author)
+                embed = discord.Embed(colour=discord.Colour.dark_red(), title='My Movies', description='')
+                for movie in mymovies:
+                    embed.description += movie.get('title') + '\n'
                 await msg.channel.send(embed=embed)
+
 
             #if command == '$audit':
             #if command == '$bestpicks':
@@ -111,9 +113,17 @@ class ButtCommands(Cog):
             print(e)
             await msg.channel.send('ERROR: '+str(e))
 
+    def get_my_movies(self, user: Message.author, only_free: bool = False):
+        self.check_user(user)
+        user_id = self.db["users"].find_one({"username": user.id}).get('_id')
+        if only_free:
+            return self.db["movies"].find({'nominator': user_id, 'nominated': False})
+        return self.db["movies"].find({'nominator': user_id})
+
     async def run_poll(self, msg: Message, tiebreaker: bool = False):
         movies = self.db["movies"].find({"nominated": True})
-        titles = [movie['title'] for movie in movies]
+        movies = self.movies_with_in_nominators(movies)
+        titles = [movie['title'] for movie in self.movies_with_in_nominators(movies)]
         duration = datetime.timedelta(hours=24)
         if len(titles) == 0:
             embed = discord.Embed(colour=discord.Colour.yellow(), title='', description='')
@@ -145,7 +155,8 @@ class ButtCommands(Cog):
         if len(winners) == 1:
             await msg.channel.send(winners[0].text + ' is the winner!')
             self.db['movies'].update_one({'title': self.clean_case(winners[0].text)}, {'$set': {'last_win_date': datetime.datetime.today()}})
-            self.db['movies'].update_many({'nominated': True}, {'$set': {'nominated': False, 'nominator': None}})
+            nominators_out = [user['_id'] for user in self.db["users"].find({"out": False})]
+            self.db['movies'].update_many({'nominated': True, 'nominator': {'$in': nominators_out}}, {'$set': {'nominated': False, 'nominator': None}})
             self.db['polls'].update_one({'message_id': pollid}, {'$set': {'open':False}})
             await pollmessage.poll.end()
         else:
@@ -157,7 +168,8 @@ class ButtCommands(Cog):
             await self.run_poll(msg, True)
 
     async def get_nominations(self, channel: Messageable):
-        movies = self.db["movies"].find({"nominated": True})
+        nominated_movies = self.db["movies"].find({"nominated": True})
+        movies = self.movies_with_in_nominators(nominated_movies)
         titles = [[movie['title'], movie.get('last_win_date')] for movie in movies]
         msg = discord.Embed(colour=discord.Colour.yellow(), title='Current Nominations', description='')
         if len(titles) == 0:
@@ -169,6 +181,14 @@ class ButtCommands(Cog):
             msg.description += '\n'
             #msg.add_field(value= title)
         await channel.send(embed=msg)
+
+    def movies_with_in_nominators(self, nominated_movies):
+        nominators_out = [user['_id'] for user in self.db["users"].find({"out": True})]
+        movies = []
+        for movie in nominated_movies:
+            if movie.get("nominator") not in nominators_out:
+                movies.append(movie)
+        return movies
 
     async def nominate_movie(self, title: str, msg: Message):
         isNew = await self.add_plain(title, msg)
@@ -189,7 +209,7 @@ class ButtCommands(Cog):
 
     def check_user(self, user: Message.author):
         if self.db["users"].count_documents({"username": user.id}) == 0:
-            self.db["users"].insert_one({"username": user.id, "out": 0})
+            self.db["users"].insert_one({"username": user.id, "out": False})
 
     async def add_movie(self, title: str, msg: Message):
         isNew = await self.add_plain(title, msg)
@@ -200,6 +220,8 @@ class ButtCommands(Cog):
             await msg.channel.send(title + ' already added by ' + user.display_name)
 
     async def add_plain(self, title: str, msg: Message) -> bool:
+        if len(title) > 55:
+            raise Exception('Movie names cannot be over 55 characters long.')
         isNew = self.db["movies"].count_documents({'title': self.clean_case(title)}) == 0
         if isNew:
             self.db["movies"].insert_one({"title": title, "originator":self.db["users"].find_one({'username': msg.author.id}).get('_id')})
