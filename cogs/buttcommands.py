@@ -6,7 +6,7 @@ from discord.ext.commands import Cog
 from discord import Message
 from discord.ext.commands import Bot
 from pymongo.mongo_client import MongoClient
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import os
 import base64
 import re
@@ -25,8 +25,11 @@ class ButtCommands(Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
         load_dotenv()
-        self.mongo = MongoClient(os.getenv("MONGO_CONNECTION"))
-        self.db = self.mongo[os.getenv("DB_NAME")]
+        #self.mongo = MongoClient(os.getenv('MONGO_CONNECTION'))
+        #name = os.getenv('DB_NAME')
+        self.mongo = MongoClient(str(os.environ.get('MONGO_CONNECTION')))
+
+        self.db = self.mongo[str(os.environ.get('DB_NAME'))]
 
     #OMDB API http://www.omdbapi.com/
 

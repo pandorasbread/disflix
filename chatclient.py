@@ -1,7 +1,7 @@
 import discord
 import asyncio
 from discord.ext.commands import Bot
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import os
 
 async def start_bot():
@@ -14,8 +14,9 @@ async def start_bot():
         if filename.endswith(".py"):
             print(filename)
             await bot.load_extension(f'cogs.{filename[:-3]}')
-    load_dotenv()
-    await bot.start(os.getenv("BUTTFRIEND_TOKEN"))
+    load_dotenv(find_dotenv())
+    token = str(os.environ.get('BUTTFRIEND_TOKEN'))
+    await bot.start(token)
 
 asyncio.run(start_bot())
 
