@@ -117,8 +117,8 @@ class ButtCommands(Cog):
         self.check_user(user)
         user_id = self.db["users"].find_one({"username": user.id}).get('_id')
         if only_free:
-            return self.db["movies"].find({'nominator': user_id, 'nominated': False})
-        return self.db["movies"].find({'nominator': user_id})
+            return self.db["movies"].find({'originator': user_id, 'nominated': False})
+        return self.db["movies"].find({'originator': user_id})
 
     async def run_poll(self, msg: Message, tiebreaker: bool = False):
         movies = self.db["movies"].find({"nominated": True})
