@@ -22,9 +22,11 @@ async def help(context):
     embed.description += '`$clear`: clears all nominations.\n'
     embed.description += '`$withdraw` OR `$w`: Removes all your nominations from the next movie night list. \n'
     embed.description += '`$withdraw` `movie_name` OR `$w` `movie_name`: Removes a specific nomination from the next movie night list. \n'
-    embed.description += '`$poll or $vote`: creates a poll.\n'
-    embed.description += '`$endpoll or $endvote`: ends a poll.\n'
+    embed.description += '`$poll` or `$vote`: creates a poll.\n'
+    embed.description += '`$endpoll` or `$endvote`: ends a poll.\n'
     embed.description += '`$out` and `$in`: change user status for movie night. Will be used to determine if movies that a user suggested should be hidden.\n'
+    embed.description += '`$ass` `ACRONYM`: get the expansion of an acronym.\n'
+    embed.description += '`$ass` `ACRONYM` `\"Acronym Expansion\"`: add an expansion of an acronym.\n'
     await context.send(embed=embed)
 
 async def start_bot():
