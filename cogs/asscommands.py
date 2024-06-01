@@ -59,10 +59,15 @@ class AssCommands(Cog):
             await context.channel.send('ERROR: '+str(e))
 
     async def get_acronym(self, context: commands.Context, acronym):
-        definitions = self.db['acronyms'].find_one({'acronym': self.clean_case(acronym)}).get('expanded')
-        embed = discord.Embed(colour=discord.Colour.random(), title='WhAt DoEs \"'+acronym+'\" sTaNd FoR?', description='')
-        for definition in definitions:
-            embed.description += definition+'\n'
+
+        embed = discord.Embed(colour=discord.Colour.random(), title='WhAt DoEs \"' + acronym + '\" sTaNd FoR?',
+                             description='')
+        acr = self.db['acronyms'].find_one({'acronym': self.clean_case(acronym)})
+        if acr is None:
+            embed.description += acronym + ' not unjarbled yet. Try `$ass ' + acronym + ' \"Some Definition\"` to dejangle it.'
+        else:
+            for definition in acr.get('expanded'):
+                embed.description += definition+'\n'
         return await context.channel.send(embed=embed)
 
     def clean_case(self, text: str):
