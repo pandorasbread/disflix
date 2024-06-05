@@ -36,7 +36,7 @@ class AssCommands(Cog):
             definition = str.title(definition)
 
             if len(str.split(definition, sep=' ')) == 1:
-                await context.channel.send('Hey consider that you do not understand how acronyms work, as they should probably have more than one word in the un-acronymed phrase. So if you want to use this command, write something like `$ass TWP \"Three Word Phrase\". Yes you need the quotes. No this is not negotiable')
+                await context.channel.send('Hey consider that you do not understand how acronyms work. Either you entered one word in the un-acronymed phrase, or you did not surround it with quotes. So if you want to use this command, write something like `$ass TWP \"Three Word Phrase\". Yes you need the quotes. No this is not negotiable')
                 return
 
 
@@ -72,6 +72,44 @@ class AssCommands(Cog):
 
     def clean_case(self, text: str):
         return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
+
+    @commands.command(name='asses', aliases=['acrs', 'as', 'acronyms'])
+    async def acronyms(self, context: commands.Context, acronym: str = None, definition: str = None):
+        try:
+            max_chars = 4096
+            embeds = [discord.Embed(colour=discord.Colour.random(), title='All your stinky little acronyms:',
+                                  description='')]
+            embedindex = 0
+
+            acrs = sorted(self.db['acronyms'].find({}), key=lambda acr: acr.get('acronym'))
+            for acr in acrs:
+                embeds[embedindex].description += '**'+acr.get('acronym')+'**' + ': ' + ', '.join(f'"{definition}"' for definition in acr.get('expanded')) + '\n'
+                if len(embeds[embedindex].description) > max_chars-500:
+                    embedindex += 1
+                    embeds.append(discord.Embed(colour=discord.Colour.random(),
+                                                       title='All your stinky little acronyms:',
+                                                       description=''))
+
+            if len(embeds) == 1:
+                return await context.channel.send(embed=embeds[0])
+
+            else:
+                embedindex = 1
+                for embed in embeds:
+                    embed.description += ' (' + str(embedindex) + ' of ' + str(len(embeds)) + ')'
+                    embedindex += 1
+                    await context.channel.send(embed=embed)
+        except Exception as e:
+            print(e)
+            await context.channel.send('ERROR: '+str(e))
+
+
+
+
+
+
+
+
 
 
 async def setup(bot):
