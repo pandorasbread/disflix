@@ -73,7 +73,7 @@ class AssCommands(Cog):
     def clean_case(self, text: str):
         return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
 
-    @commands.command(name='asses', aliases=['acrs', 'as', 'acronyms'])
+    @commands.command(name='asses', aliases=['acrs', 'as', 'acronyms', 'eatass'])
     async def acronyms(self, context: commands.Context, acronym: str = None, definition: str = None):
         try:
             max_chars = 4096
