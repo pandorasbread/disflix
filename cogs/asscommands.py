@@ -1,7 +1,7 @@
 
 import discord
 from discord.abc import Messageable
-from discord.ext.commands import Cog
+from discord.ext.commands import Cog, has_any_role, has_permissions
 from discord import Message
 from discord.ext.commands import Bot
 from discord.ext import commands
@@ -36,7 +36,7 @@ class AssCommands(Cog):
             definition = str.title(definition)
 
             if len(str.split(definition, sep=' ')) == 1:
-                await context.channel.send('Hey consider that you do not understand how acronyms work. Either you entered one word in the un-acronymed phrase, or you did not surround it with quotes. So if you want to use this command, write something like `$ass TWP \"Three Word Phrase\". Yes you need the quotes. No this is not negotiable')
+                await context.channel.send('Hey consider that you do not understand how acronyms work. Either you entered one word in the un-acronymed phrase, or you did not surround it with quotes. So if you want to use this command, write something like `$ass TWP \"Three Word Phrase\"`. Yes you need the quotes. No this is not negotiable')
                 return
 
 
@@ -44,8 +44,8 @@ class AssCommands(Cog):
                 await context.channel.send('You are unable to change perfection.')
                 return
 
-	    if len(definition) + len(acronym) > 4000:
-	    	await context.channel.send('It seems you are intentionally attempting to overflow the bot. Consider that I have already drawn myself as the chad and you as the malding soyjack therefore I am correct.')
+            if len(definition) + len(acronym) > 4000:
+                await context.channel.send('It seems you are intentionally attempting to overflow the bot. Consider that I have already drawn myself as the chad and you as the malding soyjack therefore I am correct.')
                 return
             if self.db['acronyms'].count_documents({'acronym': acronym, 'expanded': definition}) == 1:
                 await context.channel.send(definition + ' is already listed as a potential expansion of ' + acronym+'.')
@@ -93,9 +93,8 @@ class AssCommands(Cog):
                     embedindex += 1
                     embeds.append(discord.Embed(colour=discord.Colour.random(),
                                                        title='All your stinky little acronyms:',
-                                                       description=''))
-                else:
-                	embeds[embedindex].description += newdesc
+                                                       description=''))    
+                embeds[embedindex].description += newdesc
                 
 
             if len(embeds) == 1:
@@ -111,14 +110,48 @@ class AssCommands(Cog):
             print(e)
             await context.channel.send('ERROR: '+str(e))
 
+    @commands.command(name='wipeass', aliases=['asswipe', 'cleanass', 'assclean', 'bidet'])
+    async def clear_acronyms(self, context: commands.Context, acronym:str = None, definition:str = None):
+        try:
+            ismod = False
+            for role in context.message.author.roles:
+                if role.name == 'Mini Moderator':
+                    ismod = True
+            if not (context.message.author.guild_permissions.administrator or ismod):
+                return await context.channel.send('ur not a mod get outta here')
 
+            if acronym == None and definition == None:
+                await context.channel.send("Every acronym and definition deleted!")
+                return
+            
+            acronym = str.upper(acronym)
 
+            if (acronym == 'ASS'):
+                await context.channel.send('You are unable to change perfection.')
+                return
 
+            if (definition == None):
+                self.db['acronyms'].delete_one({'acronym':acronym})
+                await context.message.add_reaction('🧻')
+                return await context.channel.send('`' + acronym + '` and all definitions deleted.')
 
+            definition = str.title(definition)
 
+            if len(str.split(definition, sep=' ')) == 1:
+                await context.channel.send('`$bidet ' + acronym + ' \"' + definition +' (rest of the definition)\"`. Yes you need the quotes. No this is not negotiable')
+                return
+            
+            if self.db['acronyms'].count_documents({'acronym': acronym, 'expanded': definition}) == 0:
+                await context.channel.send('This acronym is not defined yet.')
+                return
 
+            if self.db['acronyms'].count_documents({'acronym': acronym, 'expanded': definition}) == 1:
+                self.db['acronyms'].update_one({'acronym': acronym}, {'$pull': {'expanded': definition}})
 
-
+            await context.message.add_reaction('🧻')
+        except Exception as e:
+            print(e)
+            await context.channel.send('ERROR: '+str(e))
 
 async def setup(bot):
     await bot.add_cog(AssCommands(bot))

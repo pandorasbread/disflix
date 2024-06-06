@@ -27,7 +27,8 @@ async def help(context):
     embed.description += '`$out` and `$in`: change user status for movie night. Will be used to determine if movies that a user suggested should be hidden.\n'
     embed.description += '`$ass` `ACRONYM`: get the expansion of an acronym.\n'
     embed.description += '`$ass` `ACRONYM` `\"Acronym Expansion\"`: add an expansion of an acronym.\n'
-    embed.description += '``$asses` or `$as` or `$acrs` or `$acronyms` or `eatass`: get the expansions of all acronyms.\n'
+    embed.description += '`$asses` or `$as` or `$acrs` or `$acronyms` or `eatass`: get the expansions of all acronyms.\n'
+    embed.description += '`$bidet` `ACRONYM` or `$bidet` `ACRONYM` `"definition"`: admin only command to delete acronyms or definitions.\n'
     await context.send(embed=embed)
 
 
