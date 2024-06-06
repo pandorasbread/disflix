@@ -44,6 +44,9 @@ class AssCommands(Cog):
                 await context.channel.send('You are unable to change perfection.')
                 return
 
+	    if len(definition) + len(acronym) > 4000:
+	    	await context.channel.send('It seems you are intentionally attempting to overflow the bot. Consider that I have already drawn myself as the chad and you as the malding soyjack therefore I am correct.')
+                return
             if self.db['acronyms'].count_documents({'acronym': acronym, 'expanded': definition}) == 1:
                 await context.channel.send(definition + ' is already listed as a potential expansion of ' + acronym+'.')
                 return
@@ -62,6 +65,8 @@ class AssCommands(Cog):
 
         embed = discord.Embed(colour=discord.Colour.random(), title='WhAt DoEs \"' + acronym + '\" sTaNd FoR?',
                              description='')
+        if len(embed.title) > 256:
+        	embed.title = embed.title[0:253]+'...'
         acr = self.db['acronyms'].find_one({'acronym': self.clean_case(acronym)})
         if acr is None:
             embed.description += acronym + ' not unjarbled yet. Try `$ass ' + acronym + ' \"Some Definition\"` to dejangle it.'
@@ -83,12 +88,15 @@ class AssCommands(Cog):
 
             acrs = sorted(self.db['acronyms'].find({}), key=lambda acr: acr.get('acronym'))
             for acr in acrs:
-                embeds[embedindex].description += '**'+acr.get('acronym')+'**' + ': ' + ', '.join(f'"{definition}"' for definition in acr.get('expanded')) + '\n'
-                if len(embeds[embedindex].description) > max_chars-500:
+                newdesc = '**'+acr.get('acronym')+'**' + ': ' + ', '.join(f'"{definition}"' for definition in acr.get('expanded')) + '\n'
+                if len(embeds[embedindex].description) + len(newdesc) >= max_chars:
                     embedindex += 1
                     embeds.append(discord.Embed(colour=discord.Colour.random(),
                                                        title='All your stinky little acronyms:',
                                                        description=''))
+                else:
+                	embeds[embedindex].description += newdesc
+                
 
             if len(embeds) == 1:
                 return await context.channel.send(embed=embeds[0])
@@ -96,7 +104,7 @@ class AssCommands(Cog):
             else:
                 embedindex = 1
                 for embed in embeds:
-                    embed.description += ' (' + str(embedindex) + ' of ' + str(len(embeds)) + ')'
+                    embed.title += ' (' + str(embedindex) + ' of ' + str(len(embeds)) + ')'
                     embedindex += 1
                     await context.channel.send(embed=embed)
         except Exception as e:
