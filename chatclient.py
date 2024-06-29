@@ -25,6 +25,7 @@ async def help(context):
     embed.description += '`$poll` or `$vote`: creates a poll.\n'
     embed.description += '`$endpoll` or `$endvote`: ends a poll.\n'
     embed.description += '`$out` and `$in`: change user status for movie night. Will be used to determine if movies that a user suggested should be hidden.\n'
+    embed.description += '`$addhistory` or `$ah` or `$addh` or `$hist` `mm/dd/yyyy` `movie name`: add a previous win for a movie.\n'
     embed.description += '`$ass` `ACRONYM`: get the expansion of an acronym.\n'
     embed.description += '`$ass` `ACRONYM` `\"Acronym Expansion\"`: add an expansion of an acronym.\n'
     embed.description += '`$asses` or `$as` or `$acrs` or `$acronyms` or `eatass`: get the expansions of all acronyms.\n'

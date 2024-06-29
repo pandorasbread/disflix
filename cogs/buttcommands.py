@@ -11,6 +11,7 @@ import os
 import base64
 import re
 import random
+import dateutil.parser as dparser
 
 #DONE: Poll options can't be longer than 55 characters
 #DONE: In/Out and nominations
@@ -58,20 +59,9 @@ class ButtCommands(Cog):
             if command == '$nominations' or command == '$noms':
                 await self.get_nominations(msg.channel)
             if command == '$withdraw' or command == '$w':
-                self.check_user(msg.author)
-                if not content:
-                    self.db["movies"].update_many({"nominated": True, "nominator": self.db["users"].find_one({"username": msg.author.id}).get('_id')}, {"$set": {"nominated": False,"nominator": None}})
-                else:
-                    self.db["movies"].update_one({"title":self.clean_case(content), "nominated": True, "nominator": self.db["users"].find_one(
-                        {"username": msg.author.id}).get('_id')}, {"$set": {"nominated": False, "nominator": None}})
-                    #add messaging when you withdraw a movie that isn't yours
-                await msg.add_reaction('🧻')
-
-            #if command == '$roll':
-            #if command == '$rollall':
+                await self.withdraw_movie(content, msg)
             if command == '$poll' or command == '$vote':
                 await self.run_poll(msg)
-
             if command == '$endvote' or command == '$endpoll':
                 await self.end_poll(content == 'roll', msg)
 
@@ -88,19 +78,15 @@ class ButtCommands(Cog):
             if command == '$clear':
                 self.db["movies"].update_many({"nominated": True}, {'$set': {"nominated": False, 'nominator': None}})
                 await msg.add_reaction('🧻')
-            #if command == '$swap':
+
             if command == '$mymovies':
                 mymovies = self.get_my_movies(msg.author)
                 embed = discord.Embed(colour=discord.Colour.dark_red(), title='My Movies', description='')
                 for movie in mymovies:
                     embed.description += movie.get('title') + '\n'
                 await msg.channel.send(embed=embed)
-
-
-            #if command == '$audit':
-            #if command == '$bestpicks':
-            #if command == '$historicaladd': #like $historicaladd 04/20/2020 rise of skywalker
-
+            if command == '$hist' or command == '$ha' or command == '$addhistory' or command == '$addh': #like $ha 04/20/2020 rise of skywalker
+                await self.historical_add(content, msg)
             if command == '$out':
                 self.check_user(msg.author)
                 self.db["users"].update_one({"username":msg.author.id}, {"$set": {"out":True}})
@@ -109,9 +95,49 @@ class ButtCommands(Cog):
                 self.check_user(msg.author)
                 self.db["users"].update_one({"username":msg.author.id}, {"$set": {"out":False}})
                 await msg.add_reaction('👁')
+            # if command == '$swap':
+            #if command == '$roll':
+            #if command == '$rollall':
+            # if command == '$audit':
+            # if command == '$bestpicks':
         except Exception as e:
             print(e)
             await msg.channel.send('ERROR: '+str(e))
+
+    async def withdraw_movie(self, content: str, msg: Message):
+        self.check_user(msg.author)
+        if not content:
+            self.db["movies"].update_many(
+                {"nominated": True, "nominator": self.db["users"].find_one({"username": msg.author.id}).get('_id')},
+                {"$set": {"nominated": False, "nominator": None}})
+        else:
+            nommedmovie = self.db["movies"].find_one({"title": self.clean_case(content), "nominated": True})
+            if nommedmovie is None:
+                return await msg.channel.send('Are you sure that ' + content + ' is nominated?')
+            nominator = self.db["users"].find_one({'_id': nommedmovie.get('nominator')})
+            if nominator.get('username') != msg.author.id:
+                nominatoruser = await self.bot.fetch_user(nominator.get('username'))
+                return await msg.channel.send(content + ' must be removed by the nominator, ' + nominatoruser.display_name + '.')
+            self.db["movies"].update_one(
+                {"title": self.clean_case(content), "nominated": True}, {"$set": {"nominated": False, "nominator": None}})
+        await msg.add_reaction('🧻')
+    async def historical_add(self, dateAndMovie: str, msg: Message):
+        histdate = dparser.parse(dateAndMovie.split(' ', 1)[0], fuzzy=True)
+        if (len(dateAndMovie.split(' ', 1)) > 1):
+            title = dateAndMovie.split(' ', 1)[1]
+        else:
+            return await msg.channel.send('You forgot to enter a movie, I think.')
+
+        self.check_user(msg.author)
+        isNew = await self.add_plain(title, msg)
+        lastwindate = self.db["movies"].find_one({'title': self.clean_case(title)}).get('last_win_date')
+        if lastwindate is not None and lastwindate > histdate:
+            return await msg.channel.send(title + ' last won on ' + str(lastwindate.date()) + ', which is more recent than ' + str(histdate.date()) + '.')
+
+        self.db["movies"].update_one({'title': self.clean_case(title)}, {'$set': {'last_win_date': histdate}})
+        return await msg.add_reaction('📅')
+
+
 
     def get_my_movies(self, user: Message.author, only_free: bool = False):
         self.check_user(user)
