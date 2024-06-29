@@ -129,7 +129,7 @@ class ButtCommands(Cog):
             return await msg.channel.send('You forgot to enter a movie, I think.')
 
         self.check_user(msg.author)
-        isNew = await self.add_plain(title, msg)
+        isNew = await self.add_plain(title, msg, True)
         lastwindate = self.db["movies"].find_one({'title': self.clean_case(title)}).get('last_win_date')
         if lastwindate is not None and lastwindate > histdate:
             return await msg.channel.send(title + ' last won on ' + str(lastwindate.date()) + ', which is more recent than ' + str(histdate.date()) + '.')
@@ -245,12 +245,13 @@ class ButtCommands(Cog):
             user = await self.bot.fetch_user(originator)
             await msg.channel.send(title + ' already added by ' + user.display_name)
 
-    async def add_plain(self, title: str, msg: Message) -> bool:
+    async def add_plain(self, title: str, msg: Message, frombot: bool = False) -> bool:
         if len(title) > 55:
             raise Exception('Movie names cannot be over 55 characters long.')
         isNew = self.db["movies"].count_documents({'title': self.clean_case(title)}) == 0
         if isNew:
-            self.db["movies"].insert_one({"title": title, "originator":self.db["users"].find_one({'username': msg.author.id}).get('_id')})
+            originator = self.bot.application_id if frombot else msg.author.id
+            self.db["movies"].insert_one({"title": title, "originator":self.db["users"].find_one({'username': originator}).get('_id')})
             await msg.add_reaction('👍')
         return isNew
 
