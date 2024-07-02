@@ -1,6 +1,7 @@
 import datetime
 
 import discord
+import pymongo
 from discord.abc import Messageable
 from discord.ext.commands import Cog
 from discord import Message
@@ -64,7 +65,6 @@ class ButtCommands(Cog):
                 await self.run_poll(msg)
             if command == '$endvote' or command == '$endpoll':
                 await self.end_poll(content == 'roll', msg)
-
             if command == '$randomnom':
                 mymovies = self.get_my_movies(msg.author, True)
                 titles = [movie.get('title') for movie in mymovies]
@@ -74,17 +74,24 @@ class ButtCommands(Cog):
                 randmovie = random.choice(titles)
                 await msg.channel.send('Nominating \'' + randmovie + '\'.')
                 await self.nominate_movie(randmovie, msg)
-            #if command == '$nominaterandom':
             if command == '$clear':
                 self.db["movies"].update_many({"nominated": True}, {'$set': {"nominated": False, 'nominator': None}})
                 await msg.add_reaction('🧻')
-
             if command == '$mymovies':
                 mymovies = self.get_my_movies(msg.author)
                 embed = discord.Embed(colour=discord.Colour.dark_red(), title='My Movies', description='')
                 for movie in mymovies:
-                    embed.description += movie.get('title') + '\n'
+                    lwd = movie.get('last_win_date')
+                    embed.description += movie.get('title')
+                    if lwd is not None:
+                        embed.description += ' - ' + str(lwd.date())
+                    embed.description += '\n'
                 await msg.channel.send(embed=embed)
+            if command == '$havewewatched' or command == '$watched' or command == '$hww':
+                return await self.have_we_watched(content, msg)
+            if command == '$find' or command == '$search' or command == '$f' or command == '$s':
+                return await self.find_movies(content, msg)
+
             if command == '$hist' or command == '$ha' or command == '$addhistory' or command == '$addh': #like $ha 04/20/2020 rise of skywalker
                 await self.historical_add(content, msg)
             if command == '$out':
@@ -121,6 +128,61 @@ class ButtCommands(Cog):
             self.db["movies"].update_one(
                 {"title": self.clean_case(content), "nominated": True}, {"$set": {"nominated": False, "nominator": None}})
         await msg.add_reaction('🧻')
+
+    async def have_we_watched(self, searchtext: str, msg: Message):
+        watched = []
+
+        if (searchtext is None):
+            watched = self.db["movies"].find({'last_win_date': {'$exists': True }})
+        else:
+            movie = self.db["movies"].find_one({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
+            if movie is not None:
+                watched = self.db["movies"].find({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
+            else:
+                return await msg.channel.send('`' + searchtext + '` has not been watched.')
+
+        max_chars = 4096
+        embeds = [discord.Embed(colour=discord.Colour.dark_gold(), title='Watched Movies', description='')]
+        embedindex = 0
+
+        for watch in watched.sort('last_win_date', pymongo.ASCENDING):
+            lwd = watch.get('last_win_date')
+            desc = watch.get('title') + ' - ' + str(lwd.date()) + '\n'
+            if len(embeds[embedindex].description) + len(desc) >= max_chars:
+                embedindex += 1
+                embeds.append(discord.Embed(colour=discord.Colour.dark_gold(), title='Watched Movies', description=''))
+            embeds[embedindex].description += desc
+
+        if len(embeds) == 1:
+            return await msg.channel.send(embed=embeds[0])
+
+        else:
+            embedindex = 1
+            for embed in embeds:
+                embed.title += ' (' + str(embedindex) + ' of ' + str(len(embeds)) + ')'
+                embedindex += 1
+                return await msg.channel.send(embed=embed)
+
+
+    async def find_movies(self, searchtext: str, msg: Message):
+        if searchtext is None:
+            return await msg.channel.send('You forgot to enter something to search for, I think.')
+
+        films = self.db["movies"].find({'title': self.clean_search(searchtext)})
+        embed = discord.Embed(colour=discord.Colour.dark_gold(), title='Found Movies', description='')
+
+        #if films. == 0:
+            #embed.description += 'No movies found with a similar title.'
+            #return await msg.channel.send(embed=embed)
+        for movie in films.sort('title', pymongo.ASCENDING):
+            lwd = movie.get('last_win_date')
+            embed.description += movie.get('title')
+            if lwd is not None:
+                embed.description += ' - won on ' + str(lwd.date())
+            embed.description += '\n'
+        return await msg.channel.send(embed=embed)
+
+
     async def historical_add(self, dateAndMovie: str, msg: Message):
         histdate = dparser.parse(dateAndMovie.split(' ', 1)[0], fuzzy=True)
         if (len(dateAndMovie.split(' ', 1)) > 1):
@@ -143,7 +205,7 @@ class ButtCommands(Cog):
         self.check_user(user)
         user_id = self.db["users"].find_one({"username": user.id}).get('_id')
         if only_free:
-            return self.db["movies"].find({'originator': user_id, 'nominated': False})
+            return self.db["movies"].find({'originator': user_id, 'nominated': False, 'lastwindate': None})
         return self.db["movies"].find({'originator': user_id})
 
     async def run_poll(self, msg: Message, tiebreaker: bool = False):
@@ -203,7 +265,7 @@ class ButtCommands(Cog):
         for title in titles:
             msg.description += title[0]
             if title[1] is not None:
-                msg.description += ' - won on ' + str(title[1].date())
+                msg.description += ' - ' + str(title[1].date())
             msg.description += '\n'
             #msg.add_field(value= title)
         await channel.send(embed=msg)
@@ -267,6 +329,9 @@ class ButtCommands(Cog):
 
     def clean_case(self, text: str):
         return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
+
+    def clean_search(self, text: str):
+        return re.compile(".*" + re.escape(text) + "*", re.IGNORECASE)
 
 
 
