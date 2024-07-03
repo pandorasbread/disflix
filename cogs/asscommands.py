@@ -1,12 +1,11 @@
 
 import discord
-from discord.abc import Messageable
-from discord.ext.commands import Cog, has_any_role, has_permissions
-from discord import Message
+from discord.ext.commands import Cog
 from discord.ext.commands import Bot
 from discord.ext import commands
 from pymongo.mongo_client import MongoClient
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
+from cogs.utils import cogutils
 import os
 import random
 import re
@@ -79,33 +78,16 @@ class AssCommands(Cog):
         return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
 
     @commands.command(name='asses', aliases=['acrs', 'as', 'acronyms', 'eatass'])
-    async def acronyms(self, context: commands.Context, acronym: str = None, definition: str = None):
+    async def acronyms(self, context: commands.Context):
         try:
-            max_chars = 4096
-            embeds = [discord.Embed(colour=discord.Colour.random(), title='All your stinky little acronyms:',
-                                  description='')]
-            embedindex = 0
-
             acrs = sorted(self.db['acronyms'].find({}), key=lambda acr: acr.get('acronym'))
-            for acr in acrs:
-                newdesc = '**'+acr.get('acronym')+'**' + ': ' + ', '.join(f'"{definition}"' for definition in acr.get('expanded')) + '\n'
-                if len(embeds[embedindex].description) + len(newdesc) >= max_chars:
-                    embedindex += 1
-                    embeds.append(discord.Embed(colour=discord.Colour.random(),
-                                                       title='All your stinky little acronyms:',
-                                                       description=''))    
-                embeds[embedindex].description += newdesc
-                
 
-            if len(embeds) == 1:
-                return await context.channel.send(embed=embeds[0])
+            def description_builder(acr):
+                return '**' + acr.get('acronym') + '**' + ': ' + ', '.join(f'"{definition}"' for definition in acr.get('expanded')) + '\n'
 
-            else:
-                embedindex = 1
-                for embed in embeds:
-                    embed.title += ' (' + str(embedindex) + ' of ' + str(len(embeds)) + ')'
-                    embedindex += 1
-                    await context.channel.send(embed=embed)
+            for embed in cogutils.get_safe_embeds(acrs, description_builder, 'All your stinky little acronyms:'):
+                await context.channel.send(embed=embed)
+
         except Exception as e:
             print(e)
             await context.channel.send('ERROR: '+str(e))

@@ -8,6 +8,7 @@ from discord import Message
 from discord.ext.commands import Bot
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv, find_dotenv
+from cogs.utils import cogutils
 import os
 import base64
 import re
@@ -140,47 +141,33 @@ class ButtCommands(Cog):
                 watched = self.db["movies"].find({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
             else:
                 return await msg.channel.send('`' + searchtext + '` has not been watched.')
+        watched = watched.sort('last_win_date', pymongo.ASCENDING)
 
-        max_chars = 4096
-        embeds = [discord.Embed(colour=discord.Colour.dark_gold(), title='Watched Movies', description='')]
-        embedindex = 0
-
-        for watch in watched.sort('last_win_date', pymongo.ASCENDING):
+        def description_builder(watch):
             lwd = watch.get('last_win_date')
-            desc = watch.get('title') + ' - ' + str(lwd.date()) + '\n'
-            if len(embeds[embedindex].description) + len(desc) >= max_chars:
-                embedindex += 1
-                embeds.append(discord.Embed(colour=discord.Colour.dark_gold(), title='Watched Movies', description=''))
-            embeds[embedindex].description += desc
+            return watch.get('title') + ' - ' + str(lwd.date()) + '\n'
 
-        if len(embeds) == 1:
-            return await msg.channel.send(embed=embeds[0])
+        for embed in cogutils.get_safe_embeds(watched, description_builder, 'Watched Movies', discord.Colour.dark_gold()):
+            await msg.channel.send(embed=embed)
 
-        else:
-            embedindex = 1
-            for embed in embeds:
-                embed.title += ' (' + str(embedindex) + ' of ' + str(len(embeds)) + ')'
-                embedindex += 1
-                return await msg.channel.send(embed=embed)
 
 
     async def find_movies(self, searchtext: str, msg: Message):
         if searchtext is None:
             return await msg.channel.send('You forgot to enter something to search for, I think.')
 
-        films = self.db["movies"].find({'title': self.clean_search(searchtext)})
-        embed = discord.Embed(colour=discord.Colour.dark_gold(), title='Found Movies', description='')
-
-        #if films. == 0:
-            #embed.description += 'No movies found with a similar title.'
-            #return await msg.channel.send(embed=embed)
-        for movie in films.sort('title', pymongo.ASCENDING):
+        films = self.db["movies"].find({'title': self.clean_search(searchtext)}).sort('title', pymongo.ASCENDING)
+        def description_builder(movie):
             lwd = movie.get('last_win_date')
-            embed.description += movie.get('title')
+            desc = movie.get('title')
             if lwd is not None:
-                embed.description += ' - won on ' + str(lwd.date())
-            embed.description += '\n'
-        return await msg.channel.send(embed=embed)
+                desc += ' - ' + str(lwd.date())
+            desc += '\n'
+            return desc
+
+        for embed in cogutils.get_safe_embeds(films, description_builder, 'Found Movies:', discord.Colour.dark_gold()):
+            await msg.channel.send(embed=embed)
+
 
 
     async def historical_add(self, dateAndMovie: str, msg: Message):
@@ -209,6 +196,11 @@ class ButtCommands(Cog):
         return self.db["movies"].find({'originator': user_id})
 
     async def run_poll(self, msg: Message, tiebreaker: bool = False):
+        activepoll = self.db['polls'].find_one({'open': True})
+        if activepoll is not None:
+            activepollmessage = await msg.channel.fetch_message(activepoll.get('message_id'))
+            return await msg.channel.send('Current poll here: '+ activepollmessage.jump_url)
+
         movies = self.db["movies"].find({"nominated": True})
         movies = self.movies_with_in_nominators(movies)
         titles = [movie['title'] for movie in self.movies_with_in_nominators(movies)]
@@ -331,7 +323,7 @@ class ButtCommands(Cog):
         return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
 
     def clean_search(self, text: str):
-        return re.compile(".*" + re.escape(text) + "*", re.IGNORECASE)
+        return re.compile(".*" + re.escape(text) + ".*", re.IGNORECASE)
 
 
 
