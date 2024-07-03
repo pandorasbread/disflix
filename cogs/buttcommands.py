@@ -93,7 +93,7 @@ class ButtCommands(Cog):
             if command == '$find' or command == '$search' or command == '$f' or command == '$s':
                 return await self.find_movies(content, msg)
 
-            if command == '$hist' or command == '$ha' or command == '$addhistory' or command == '$addh': #like $ha 04/20/2020 rise of skywalker
+            if command == '$hist' or command == '$ha' or command == '$ah' or command == '$addhistory' or command == '$addh': #like $ha 04/20/2020 rise of skywalker
                 await self.historical_add(content, msg)
             if command == '$out':
                 self.check_user(msg.author)
