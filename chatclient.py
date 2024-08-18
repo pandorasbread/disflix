@@ -2,6 +2,7 @@ import discord
 import asyncio
 from discord.ext.commands import Bot
 from dotenv import load_dotenv, find_dotenv
+import pathlib
 import os
 
 
@@ -41,7 +42,8 @@ async def halp(context):
     await help(context)
 
 async def start_bot():
-    for filename in os.listdir("./cogs"):
+    directory = pathlib.Path(__file__).parent.resolve()
+    for filename in os.listdir(str(directory)+"/cogs"):
         if filename.endswith(".py"):
             print(filename)
             await bot.load_extension(f'cogs.{filename[:-3]}')
