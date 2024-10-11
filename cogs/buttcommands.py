@@ -58,6 +58,8 @@ class ButtCommands(Cog):
             if command == '$nominate' or command == '$nom': #maybe add custom emoji to movie?
                 self.check_user(msg.author)
                 await self.nominate_movie(content, msg)
+            if command == '$nommy' or command ==  '$nommysorry' or command == '$qn' or command == '$qnom':
+                await self.nominate_my(content, msg)
             if command == '$nominations' or command == '$noms':
                 await self.get_nominations(msg.channel)
             if command == '$withdraw' or command == '$w':
@@ -192,7 +194,7 @@ class ButtCommands(Cog):
         self.check_user(user)
         user_id = self.db["users"].find_one({"username": user.id}).get('_id')
         if only_free:
-            return self.db["movies"].find({'originator': user_id, 'nominated': False, 'lastwindate': None})
+            return self.db["movies"].find({'originator': user_id, 'nominated': False, "last_win_date": {'$exists': False}})
         return self.db["movies"].find({'originator': user_id})
 
     async def run_poll(self, msg: Message, tiebreaker: bool = False):
@@ -285,6 +287,22 @@ class ButtCommands(Cog):
             if last_win is not None:
                 await msg.channel.send(title + ' won on ' + str(last_win.date()))
             await msg.add_reaction('🗳️')
+
+
+    async def nominate_my (self, title: str, msg: Message):
+        self.check_user(msg.author)
+        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
+        if title is None:
+            return await msg.channel.send('You forgot to enter something to nominate, I think.')
+
+        film = self.db["movies"].find_one({'title': self.clean_search(title), 'nominated': False, 'last_win_date': {'$exists': False}, 'nominator': user_id}).get('title')
+
+        if film is not None:
+            return await self.nominate_movie(film, msg)
+
+        else:
+            return await msg.channel.send('You have not nominated a movie with a title like `' + title + '`. Quick nom is meant as a way to reference your own nominations easily.')
+
 
 
     def check_user(self, user: Message.author):
