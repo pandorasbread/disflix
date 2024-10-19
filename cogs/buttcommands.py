@@ -59,7 +59,9 @@ class ButtCommands(Cog):
                 self.check_user(msg.author)
                 await self.nominate_movie(content, msg)
             if command == '$nommy' or command ==  '$nommysorry' or command == '$qn' or command == '$qnom':
-                await self.nominate_my(content, msg)
+                await self.nominate_db(content, msg, True)
+            if command == '$nomdb':
+                await self.nominate_db(content, msg, False)
             if command == '$nominations' or command == '$noms':
                 await self.get_nominations(msg.channel)
             if command == '$withdraw' or command == '$w':
@@ -289,19 +291,29 @@ class ButtCommands(Cog):
             await msg.add_reaction('🗳️')
 
 
-    async def nominate_my (self, title: str, msg: Message):
+    async def nominate_db(self, title: str, msg: Message, user_nominated: bool = False):
         self.check_user(msg.author)
-        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
         if title is None:
             return await msg.channel.send('You forgot to enter something to nominate, I think.')
 
-        film = self.db["movies"].find_one({'title': self.clean_search(title), 'nominated': False, 'last_win_date': {'$exists': False}, 'nominator': user_id}).get('title')
-
-        if film is not None:
-            return await self.nominate_movie(film, msg)
-
+        if user_nominated:
+            user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
+            films = self.db["movies"].find({'title': self.clean_search(title), 'nominated': False, 'originator': user_id}).sort('title', pymongo.ASCENDING)
         else:
-            return await msg.channel.send('You have not nominated a movie with a title like `' + title + '`. Quick nom is meant as a way to reference your own nominations easily.')
+            films = self.db["movies"].find({'title': self.clean_search(title), 'nominated': False}).sort('title', pymongo.ASCENDING)
+        film = None
+
+        for f in films:
+            if 'last_win_date' not in f:
+                film = f
+                break
+
+        if film is None:
+            return await msg.channel.send(
+                'You have not nominated a movie with a title like `' + title + '` or it is already nominated this week. Quick nom is meant as a way to reference your own nominations easily.')
+
+        await self.nominate_movie(film['title'], msg)
+        return await msg.channel.send('Nominated `' + film['title'] + '`.')
 
 
 
