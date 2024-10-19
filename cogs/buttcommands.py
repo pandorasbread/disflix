@@ -62,6 +62,8 @@ class ButtCommands(Cog):
                 await self.nominate_db(content, msg, True)
             if command == '$nomdb':
                 await self.nominate_db(content, msg, False)
+            if command == '$omnomnom':
+                await self.omnomnom(content, msg)
             if command == '$nominations' or command == '$noms':
                 await self.get_nominations(msg.channel)
             if command == '$withdraw' or command == '$w':
@@ -310,10 +312,38 @@ class ButtCommands(Cog):
 
         if film is None:
             return await msg.channel.send(
-                'You have not nominated a movie with a title like `' + title + '` or it is already nominated this week. Quick nom is meant as a way to reference your own nominations easily.')
+                'You have not entered a movie with a title like `' + title + '` or it is already nominated this week. Quick nom is meant as a way to reference your own nominations easily.')
 
         await self.nominate_movie(film['title'], msg)
         return await msg.channel.send('Nominated `' + film['title'] + '`.')
+
+    async def omnomnom(self, title: str, msg: Message):
+        self.check_user(msg.author)
+        if title is None:
+            return await msg.channel.send('You forgot to enter something to steal, I think.')
+
+        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
+        films = self.db["movies"].find({'title': self.clean_search(title), '$or':[{'nominated': False}, {'nominated': {'$exists':False}}]}).sort('title',
+                                                                                                     pymongo.ASCENDING)
+        film = None
+        for f in films:
+            if 'last_win_date' not in f:
+                film = f
+                break
+
+        if film is None:
+            return await msg.channel.send(
+                'No one entered a movie with a title like `' + title + '`, or it is already nominated, or it has already won.')
+
+        if film['originator'] == user_id:
+            return await msg.channel.send('`'+film['title']+'` is your own movie, stealing it is legal and thus I will not assist you.')
+
+
+        old_user = await self.bot.fetch_user(self.db["users"].find_one({"_id": film['originator']}).get('username'))
+        await msg.channel.send('⛵😏'+ msg.author.name + '🏴‍☠️' + film['title'] + '🏴‍☠️  🌊🏝️🥺' + old_user.display_name)
+
+        self.db["movies"].update_one({'title': self.clean_case(film['title'])}, {'$set': {'originator': user_id}})
+        return await self.nominate_movie(film['title'], msg)
 
 
 
@@ -335,7 +365,7 @@ class ButtCommands(Cog):
         isNew = self.db["movies"].count_documents({'title': self.clean_case(title)}) == 0
         if isNew:
             originator = self.bot.application_id if frombot else msg.author.id
-            self.db["movies"].insert_one({"title": title, "originator":self.db["users"].find_one({'username': originator}).get('_id')})
+            self.db["movies"].insert_one({"title": title, "originator": self.db["users"].find_one({'username': originator}).get('_id'), 'nominated': False})
             await msg.add_reaction('👍')
         return isNew
 
