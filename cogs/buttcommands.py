@@ -15,15 +15,46 @@ import re
 import random
 import dateutil.parser as dparser
 
-#DONE: Poll options can't be longer than 55 characters
-#DONE: In/Out and nominations
-#TODO: If a poll is active and a nomination is added, if there are no votes, then add the option. Same with withdrawing.
-#TODO: add rolling
-#TODO: add closing or deleting specific polls
-#TODO: Always close active poll when new poll is called
-#DONE: hook into the actual Help methods
-#DONE: $mymovies
-#REMEMBER: do not forget https://discordpy.readthedocs.io/en/latest/api.html#discord.Poll
+
+# scope creep
+# TODO: If a poll is active and a nomination is added, if there are no votes, then add the option. Same with withdrawing.
+# TODO: add closing polls from any channel
+    # need to track channel that a poll was posted in.
+# TODO: add auto-ending of polls
+    # we know the poll update. The bot can start an async timer when a poll starts and kill it after that many days by checking .
+# TODO: Movie emojis
+    # add emoji code column to the movie object. If there's none, then use whatever the default is.
+    # need a command to add an emoji to an existing movie
+    # need a command to add a movie with an emoji
+# TODO: AUDITING!
+    # Create a table for user audits.
+    # Save every unique instance of an issue per user. Delete after one year. Check for old records on table update.
+    # Save every instance of voter fraud
+    # TODO: Poll auditing!
+        # when a poll closes, run a check:
+        # see if a user voted on a poll more times than allowed -> voter fraud
+        # notify buttdvf
+        # see if a user voted but for fewer options than allowed -> sus behavior
+        # TODO: DVF vote timeouts
+            # ability to time a user out
+            # exclude a user's votes if they are on time out.
+        # TODO: USER AUDITING!
+            # audit a user's behavior.
+            # get a list of all infractions
+    # TODO: USER BULLYING!
+        # when a user makes a mistake, log it. Next time they make the same mistake, remind them of what they did.
+# TODO: download OMDB movie and series datasets and upload into server.
+    # update this dataset every week on sunday.
+    # TODO: name verification
+        # when a user runs $add or $nom, verify that the name is legal.
+        # TODO: when a name matches multiple (such as a remake or a shared movie name), provide an embed so that a user can select the intended option via reacts. Delete the poll when a user selects a choice.
+        # TODO: When a user adds a new movie, search our db for exact match, then search real db for exact match, then search our db for near match, then search big db for near match.
+#TODO: additional warnings
+    # when a user is marked as out but noms a movie
+    # if someone tries to add an acronym but actually adds a movie, i think i can regex for this
+# TODO: buttfriend world dominance
+#need to track servers for this to work.ordpy.readthedocs.io/en/latest/api.html#discord.Poll
+
 class ButtCommands(Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
