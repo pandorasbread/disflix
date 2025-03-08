@@ -140,6 +140,8 @@ class ButtCommands(Cog):
                 self.check_user(msg.author)
                 self.db["users"].update_one({"username":msg.author.id}, {"$set": {"out":False}})
                 await msg.add_reaction('👁')
+            if command == '$movierole':
+                await self.addrole(content, msg, 'movie_watcher')
             # if command == '$swap':
             #if command == '$roll':
             #if command == '$rollall':
@@ -148,6 +150,32 @@ class ButtCommands(Cog):
         except Exception as e:
             print(e)
             await msg.channel.send('ERROR: '+str(e))
+
+    async def addrole(self, content: str, msg: Message, rolename: str):
+        server = msg.guild
+
+        if content.strip('<>&@').isdecimal():
+            role_id = int(content.strip('<>&@'))
+        else:
+            roles = await server.fetch_roles()
+            while len(roles) > 0:
+                r = roles.pop()
+                if r.name == content:
+                    role_id = r.id
+                    break
+        if (role_id is None):
+            return await msg.channel.send('ERROR: invalid role '+content)
+
+        result = ""
+
+        role = self.db["roles"].find_one({"server_id": msg.guild.id, "role": rolename})
+        if role is None:
+            self.db["roles"].insert_one({"server_id": msg.guild.id, "role": rolename, "role_id": role_id})
+        else:
+            self.db["roles"].update_one({"server_id": msg.guild.id, "role": rolename}, {"$set": {"role_id": role_id}})
+            return await msg.channel.send(rolename + " changed from " + server.get_role(role.get("role_id")).name + " to " + server.get_role(role_id).name + '. ')
+
+        return await msg.channel.send(rolename + " is now assigned to " + server.get_role(role_id).name + '.')
 
     async def withdraw_movie(self, content: str, msg: Message):
         self.check_user(msg.author)
@@ -232,6 +260,12 @@ class ButtCommands(Cog):
             return self.db["movies"].find({'originator': user_id, 'nominated': False, "last_win_date": {'$exists': False}})
         return self.db["movies"].find({'originator': user_id})
 
+    def tag_role(self, rolename: str, server: discord.Guild):
+        role = self.db['roles'].find_one({'server_id': server.id, 'role': rolename})
+        if role is None:
+            return ""
+        return server.get_role(role.get('role_id')).mention + "\r\n"
+
     async def run_poll(self, msg: Message, tiebreaker: bool = False):
         activepoll = self.db['polls'].find_one({'open': True})
         if activepoll is not None:
@@ -271,6 +305,7 @@ class ButtCommands(Cog):
                               duration=duration)
         for title in titles:
             result.add_answer(text=title)
+        await msg.channel.send(self.tag_role('movie_watcher', msg.guild))
         sent_poll = await msg.channel.send(poll=result)
 
         self.db['polls'].insert_one({'server_id': msg.guild.id, 'message_id': sent_poll.id, 'channel_id':sent_poll.channel.id, 'poll_time': datetime.datetime.now(tz=datetime.timezone.utc), 'poll_code':poll_code, 'open':True})
@@ -282,7 +317,7 @@ class ButtCommands(Cog):
         sortedlist = sorted(pollmessage.poll.answers, key=lambda a: a.vote_count, reverse=True)
         winners = [answer for answer in sortedlist if answer.vote_count == sortedlist[0].vote_count]
         if len(winners) == 1:
-            await msg.channel.send(winners[0].text + ' is the winner!')
+            await msg.channel.send(self.tag_role('movie_watcher', msg.guild) + winners[0].text + ' is the winner!')
             self.db['movies'].update_one({'title': self.clean_case(winners[0].text)}, {'$set': {'last_win_date': datetime.datetime.today()}})
             nominators_out = [user['_id'] for user in self.db["users"].find({"out": False})]
             self.db['movies'].update_many({'nominated': True, 'nominator': {'$in': nominators_out}}, {'$set': {'nominated': False, 'nominator': None}})
