@@ -2,6 +2,7 @@ import datetime
 
 import discord
 import pymongo
+import emojis
 from discord.abc import Messageable
 from discord.ext.commands import Cog
 from discord import Message
@@ -151,6 +152,19 @@ class ButtCommands(Cog):
             print(e)
             await msg.channel.send('ERROR: '+str(e))
 
+    def extract_emoji(self, content: str):
+
+        #get using library
+        emoji = emojis.get(content)
+
+        #get using regex
+        if (emoji is None):
+            emoji = re.match(r'<.*:\w*:\d*>', content)
+        if (emoji is None):
+            return ''
+        return emoji
+
+
     async def addrole(self, content: str, msg: Message, rolename: str):
         server = msg.guild
 
@@ -197,7 +211,6 @@ class ButtCommands(Cog):
 
     async def have_we_watched(self, searchtext: str, msg: Message):
         watched = []
-
         if (searchtext is None):
             watched = self.db["movies"].find({'last_win_date': {'$exists': True }})
         else:
@@ -205,7 +218,14 @@ class ButtCommands(Cog):
             if movie is not None:
                 watched = self.db["movies"].find({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
             else:
-                return await msg.channel.send('`' + searchtext + '` has not been watched.')
+                result = '`' + searchtext + '` has not been watched.'
+                messyfind = self.db["movies"].find_one({'title': self.clean_search(searchtext), 'last_win_date':{'$exists': True}})
+                if messyfind is None:
+                    return await msg.channel.send(result)
+                result += ' Maybe one of these is what you are looking for?'
+                await msg.channel.send(result)
+                watched = self.db["movies"].find({'title': self.clean_search(searchtext), 'last_win_date': {'$exists': True}})
+
         watched = watched.sort('last_win_date', pymongo.ASCENDING)
 
         def description_builder(watch):

@@ -6,7 +6,7 @@ This is a bot for a discord server full of friends. It currently:
 It does this all using MongoDB's Atlas as a database and discord.py, without which, this project would be a lot more annoying :>
 
 ## Dependencies
-- `pip install python-dateutil pymongo discord.py python-dotenv`
+- `pip install python-dateutil pymongo discord.py python-dotenv emojis`
 - Additionally you need to create a file named `.env` that looks like:
 BUTTFRIEND_TOKEN='enter token here'
 MONGO_CONNECTION='enter mongodb token here'
