@@ -143,6 +143,8 @@ class ButtCommands(Cog):
                 await msg.add_reaction('👁')
             if command == '$movierole':
                 await self.addrole(content, msg, 'movie_watcher')
+            if command == '$wins':
+                await self.score(msg)
             # if command == '$swap':
             #if command == '$roll':
             #if command == '$rollall':
@@ -234,6 +236,36 @@ class ButtCommands(Cog):
 
         for embed in cogutils.get_safe_embeds(watched, description_builder, 'Watched Movies', discord.Colour.dark_gold()):
             await msg.channel.send(embed=embed)
+
+    async def score(self, msg: Message):
+        films = list(self.db["movies"].find({"last_win_date": {'$exists': True}}))
+        users = list(self.db["users"].find())
+        scores = dict()
+        for film in films:
+            nom = film.get("originator")
+            for user in users:
+                if user.get("_id") == nom and nom is not None:
+                    if user.get('username') not in scores:
+                        scores[user.get('username')] = 1
+                        break
+                    else:
+                        scores[user.get('username')] = scores[user.get('username')]+1
+                        break
+
+        def score_builder(userToTotal):
+            return userToTotal[0] + ' - ' + str(userToTotal[1]) + '\n'
+
+        orderedscores = list(map(list, sorted(scores.items(), key=lambda item: item[1], reverse=True)))
+
+        for score in orderedscores:
+            usr = await self.bot.fetch_user(score[0])
+            score[0] = usr.display_name
+
+        for embed in cogutils.get_safe_embeds(orderedscores, score_builder, 'Movie Night Wins',
+                                              discord.Colour.dark_gold()):
+            await msg.channel.send(embed=embed)
+
+
 
 
 
