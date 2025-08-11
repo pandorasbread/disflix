@@ -38,6 +38,10 @@ async def help(context):
     embed.description += '`$ass` `ACRONYM` `\"Acronym Expansion\"`: add an expansion of an acronym.\n'
     embed.description += '`$asses` or `$as` or `$acrs` or `$acronyms` or `eatass`: get the expansions of all acronyms.\n'
     embed.description += '`$bidet` `ACRONYM` or `$bidet` `ACRONYM` `"definition"`: admin only command to delete acronyms or definitions.\n'
+    embed.description += '`$buyvote` TAGGED_USER: The person who uses the command "buys" the vote of the tagged user, which is recorded to be used in a future vote.\n'
+    embed.description += '`$usevote` TAGGED_USER: The person who uses the command uses the vote of the tagged user in a movie poll if they have a bote.\n'
+    embed.description += '`$checkvotes`: Check the list of votes you have from people who have bought your vote in a past movie poll.\n'
+    embed.description += '`$deletevotes`: Deletes all the votes in the database that the user has gained from being bought in past movie polls.\n'
     await context.send(embed=embed)
 
 
