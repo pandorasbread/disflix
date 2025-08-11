@@ -1,0 +1,5 @@
+discord>=2.3.2
+dotenv>=0.9.9
+pymongo>=4.14.0
+emojis>=0.7.0
+python-dateutil>=2.9.0
