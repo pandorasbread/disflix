@@ -16,22 +16,34 @@ class MiscCommands(Cog):
         self.mongo = MongoClient(str(os.environ.get('MONGO_CONNECTION')))
         self.db = self.mongo[str(os.environ.get('DB_NAME'))]
 
-    @commands.command(name='kneecaps', aliases=['kc', 'kneecap', 'knees'])
+    @commands.command(name='kneecaps', aliases=['kc', 'kneecap', 'kneecaps', 'knees'])
     async def bust_kneecaps(self, context: commands.Context):
         try:
             #self.high_data_method(context)
-            await self.low_data_method(context)
-
+            await self.kc_low_data_method(context)
 
         except Exception as e:
             print(e)
             await context.channel.send('ERROR: ' + str(e))
 
-    async def low_data_method(self, context: commands.Context):
+    @commands.command(name='mykneecaps', aliases=['mykc', 'mykneecaps', 'myknees', 'peter'])
+    async def my_kneecaps(self, context: commands.Context):
+        try:
+            await self.mykc_low_data_method(context)
+
+        except Exception as e:
+            print(e)
+            await context.channel.send('ERROR: ' + str(e))
+
+    async def mykc_low_data_method(self, context: commands.Context):
+        await context.channel.send('i\'ve been busted :(')
+        await context.channel.send("https://media.discordapp.net/attachments/1230913367447961600/1492348684057444492/image0.gif?ex=69db0184&is=69d9b004&hm=b981c479939bf4c59af88957e557cadbd40ace61cd6bea9288cee225e321a85a&=")
+
+    async def kc_low_data_method(self, context: commands.Context):
         await context.channel.send('bustin\' makes me feel good')
         await context.channel.send("https://cdn.discordapp.com/attachments/514221002117480451/1232873953610039347/Rian_bustin_kneecaps_Made_with_FlexClip1.gif?ex=674288d8&is=67413758&hm=8a79893799d085879905fefa88d7e68bffb5b9cc34b93b013831e35b6548e790&")
 
-    async def high_data_method(self, context: commands.Context):
+    async def kc_high_data_method(self, context: commands.Context):
         async with aiohttp.ClientSession() as session:
             async with session.get(
                     'https://cdn.discordapp.com/attachments/514221002117480451/1232873953610039347/Rian_bustin_kneecaps_Made_with_FlexClip1.gif?ex=674288d8&is=67413758&hm=8a79893799d085879905fefa88d7e68bffb5b9cc34b93b013831e35b6548e790&') as resp:
