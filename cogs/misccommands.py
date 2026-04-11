@@ -26,7 +26,7 @@ class MiscCommands(Cog):
             print(e)
             await context.channel.send('ERROR: ' + str(e))
 
-    @commands.command(name='kneecaps', aliases=['mykc', 'mykneecaps', 'myknees', 'peter'])
+    @commands.command(name='mykneecaps', aliases=['mykc', 'mykneecaps', 'myknees', 'peter'])
     async def my_kneecaps(self, context: commands.Context):
         try:
             await self.mykc_low_data_method(context)
