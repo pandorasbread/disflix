@@ -16,7 +16,7 @@ class MiscCommands(Cog):
         self.mongo = MongoClient(str(os.environ.get('MONGO_CONNECTION')))
         self.db = self.mongo[str(os.environ.get('DB_NAME'))]
 
-    @commands.command(name='kneecaps', aliases=['kc', 'kneecap', 'kneecaps', 'knees'])
+    @commands.command(name='kneecaps', aliases=['kc', 'kneecap', 'knees'])
     async def bust_kneecaps(self, context: commands.Context):
         try:
             #self.high_data_method(context)
@@ -26,7 +26,7 @@ class MiscCommands(Cog):
             print(e)
             await context.channel.send('ERROR: ' + str(e))
 
-    @commands.command(name='mykneecaps', aliases=['mykc', 'mykneecaps', 'myknees', 'peter'])
+    @commands.command(name='mykneecaps', aliases=['mykc', 'myknees', 'peter'])
     async def my_kneecaps(self, context: commands.Context):
         try:
             await self.mykc_low_data_method(context)

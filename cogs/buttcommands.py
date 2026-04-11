@@ -79,6 +79,7 @@ class ButtCommands(Cog):
             content = None
             if (len(msg.content.split(' ', 1)) > 1):
                 content = msg.content.split(' ', 1)[1]
+                content = self.sanitize_input(content)
 
             if command == '$testing':
                 await msg.channel.send('uwu')
@@ -169,6 +170,14 @@ class ButtCommands(Cog):
         except Exception as e:
             print(e)
             await msg.channel.send('ERROR: '+str(e))
+
+    def sanitize_input(self, msg: str):
+        new_msg = re.sub(r'[’`‵ʼ‘]', '\'', msg) #fix singlequote characters
+        new_msg = re.sub(r'[“”＂❝❞]', '"', new_msg) #fix double quote characters
+        new_msg = re.sub(r'[   ]', ' ', new_msg) #replace ENSP, EMSP, and non-breaking space
+        new_msg = re.sub(r'…', '...', new_msg) #fix ellipses
+        return new_msg
+
 
     def extract_emoji(self, content: str):
 
