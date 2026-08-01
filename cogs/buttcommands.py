@@ -399,6 +399,7 @@ class ButtCommands(Cog):
             nominators_out = [user['_id'] for user in self.db["users"].find({"out": False})]
             self.db['movies'].update_many({'nominated': True, 'nominator': {'$in': nominators_out}}, {'$set': {'nominated': False, 'nominator': None}})
             self.db['polls'].update_one({'message_id': poll.get('message_id')}, {'$set': {'open':False}})
+            self.db['users'].update_many({}, {'$set': {'out':False}})
             await pollmessage.poll.end()
         else:
             for answer in sortedlist:
