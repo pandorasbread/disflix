@@ -635,8 +635,8 @@ class ButtCommands(Cog):
                 rating: float = round(float(rating), 2)
                 # Check to see if rating is between 0 and 10.0
                 if not 0 <= rating <= 10.0:
-                    await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10. (Yes, your rating was rounded)')
-                return
+                    await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10.')
+                    return
             except ValueError:
                 # If the value i
                 await msg.channel.send(f'Hey, you gotta put the rating then the movie name first bub. Ex `$rate 10 Your Mom`')
@@ -673,9 +673,11 @@ class ButtCommands(Cog):
         # If already rated before, update the row. If not, add a new row. 
         if self.db["movieratings"].count_documents({'user_id': user_id, 'movie': full_title}) != 0:
             self.db["movieratings"].find_one_and_update({'user_id': user_id, 'movie': full_title},{'$set': { 'rating': rating }})
+            await msg.add_reaction('🍿')
             await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
         else: 
             self.db["movieratings"].insert_one({'user_id': user_id, 'movie': full_title, 'rating': rating})
+            await msg.add_reaction('🍿')
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 
 
