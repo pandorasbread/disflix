@@ -162,6 +162,14 @@ class ButtCommands(Cog):
                 await msg.channel.send(embed=embed)
             if command == '$deletevotes':
                 await self.delete_owned_votes(msg)
+            if command == '$rate':
+                await self.rate_movie(content, msg)
+            if command == '$myratings':
+                await self.get_user_ratings(msg)
+            if command == '$ratings':
+                await self.get_movie_ratings(content, msg)
+            if command == '$topratings':
+                await self.get_top_ratings(msg)
             # if command == '$swap':
             #if command == '$roll':
             #if command == '$rollall':
@@ -614,6 +622,157 @@ class ButtCommands(Cog):
             await msg.channel.send('You don\'t exist')
 
 
+    async def rate_movie(self, rating_info: str, msg: Message):
+        # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
+        rating, title = rating_info.split(" ", maxsplit=1)
+        delete_rating = False
+
+        # If rating is a 'x', set the rating to be deleted
+        if rating == 'x':
+            delete_rating = True
+            rating: float = 0.0 
+        else:
+            try:
+                rating: float = round(float(rating), 2)
+                # Check to see if rating is between 0 and 10.0
+                if not 0 <= rating <= 10.0:
+                    await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10.')
+                    return
+            except ValueError:
+                # If the value i
+                await msg.channel.send(f'Hey, you gotta put the rating then the movie name first bub. Ex `$rate 10 Your Mom`')
+                return
+
+        # Get the User of the command 
+        self.check_user(msg.author)
+        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
+
+        # If the rating as a 'x', delete the rating
+        if delete_rating:
+            self.db["movieratings"].delete_one({"movie": self.clean_case(title), "user_id": user_id})
+            await msg.channel.send(f'{title}\'s rating has been deleted')
+            return
+
+        # Shouldn't ever hit here, but if title and rating are none, send a message back
+        if title is None and rating is None:
+            await msg.channel.send('You didn\'t even put a movie or a rating...')
+
+        # Check if movie exists. If not, send back a message
+        if self.db["movies"].count_documents({'title': self.clean_search(title)}) == 0:
+            await msg.channel.send(f'Movie {title} does not exist.')
+            return
+
+        # Use the Title saves in the Movies table
+        full_title = self.db["movies"].find_one({'title': self.clean_search(title)}).get('title')
+
+        # If the movie has not been watched as part of the BUTT Movie Night, let the commander know
+        movie = self.db["movies"].find_one({'title': self.clean_case(title), 'last_win_date':{'$exists': True}})
+        if movie is None:
+            await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
+            return
+
+        # If already rated before, update the row. If not, add a new row. 
+        if self.db["movieratings"].count_documents({'user_id': user_id, 'movie': full_title}) != 0:
+            self.db["movieratings"].find_one_and_update({'user_id': user_id, 'movie': full_title},{'$set': { 'rating': rating }})
+            await msg.add_reaction('🍿')
+            await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
+        else: 
+            self.db["movieratings"].insert_one({'user_id': user_id, 'movie': full_title, 'rating': rating})
+            await msg.add_reaction('🍿')
+            await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
+
+
+    async def get_user_ratings(self, msg: Message):
+        # Get the username and their list of movie reviews
+        self.check_user(msg.author)
+        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
+        ratings = self.db["movieratings"].find({'user_id': user_id}).sort('movie', pymongo.ASCENDING)
+
+        # Output each movie and its rating into new lines
+        embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings', description='')
+        for rating in ratings:
+            embed.description += rating.get('movie') + " - " + str(rating.get('rating'))
+            embed.description += '\n'
+        await msg.channel.send(embed=embed)
+
+    async def get_movie_ratings(self, title: str, msg: Message):
+        # Check if movie exists. If not, send back a message
+        if self.db["movies"].count_documents({'title': self.clean_search(title)}) == 0:
+            await msg.channel.send(f'Movie {title} does not exist.')
+            return
+
+        # Get Ratings in Desending (Highest Rating Value) order
+        ratings = self.db["movieratings"].find({'movie': self.clean_search(title)}).sort('rating', pymongo.DESCENDING)
+
+        # Use the Title saves in the Movies table
+        full_title = self.db["movies"].find_one({'title': self.clean_search(title)}).get('title')
+
+        embed = discord.Embed(colour=discord.Colour.orange(), title=f'Ratings for {full_title}', description='')
+
+        added_ratings: float = 0.0
+        total_ratings: int = 0
+
+        # For each rating, get the username of the member who rated it and their rating per line. 
+        for rating in ratings:
+            username = self.db["users"].find_one({"_id": rating.get('user_id')}).get('username')
+            user = await self.bot.fetch_user(str(username))
+            embed.description += user.name + ' - ' + str(rating.get('rating'))
+            embed.description += '\n'
+            added_ratings += rating.get('rating')
+            total_ratings += 1
+
+        # Calculate the average
+        average: float = added_ratings / total_ratings
+        embed.description += '\n'
+        embed.description += f'**Average Rating:**  {str(round(average, 2))}'
+
+        await msg.channel.send(embed=embed)
+
+    async def get_top_ratings(self, msg: Message):
+        MAX_RATINGS = 10  # Current Max number of Top Movie ratings
+
+        # Get the list of every distinct movie title in the `movieratings` table
+        ratings = self.db["movieratings"]
+        unique_movies = ratings.distinct('movie')
+
+        movie_reviews: list = []
+
+        # For each movie, calculate the average review score from all its ratings
+        for movie in unique_movies:
+            added_ratings: float = 0.0
+            total_ratings: int = 0
+            ratings = self.db["movieratings"].find({'movie': self.clean_search(movie)}).sort('rating', pymongo.DESCENDING)
+
+            # If Movie doesnt exist, skip it. Could be bad test data or something fucked up
+            if self.db["movies"].find_one({'title': self.clean_search(movie)}) is None:
+                continue
+
+            full_title = self.db["movies"].find_one({'title': self.clean_search(movie)}).get('title')
+
+            for rating in ratings:
+                added_ratings += rating.get('rating')
+                total_ratings += 1
+
+            average: float = round(added_ratings / total_ratings, 2)
+
+            movie_reviews.append([full_title, average])
+
+        embed = discord.Embed(colour=discord.Colour.yellow(), title='Top Movie Reviews', description='')
+
+        # Sort the list of Titles by highest rating to lowest
+        movie_reviews.sort(key=lambda x: x[1], reverse=True)
+
+        # If Max number of ratings not reached, use the length of the list
+        if len(movie_reviews) < MAX_RATINGS:
+            loops = len(movie_reviews)
+        else:
+            loops = MAX_RATINGS
+
+        # For the number of movies (either max or length), add to list Bolded. 
+        for review in movie_reviews[:loops]:
+            embed.description += f'## **{review[0]}** - **{str(review[1])}**'
+            embed.description += '\n'
+        await msg.channel.send(embed=embed)
 
 
 async def setup(bot):
