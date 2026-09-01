@@ -666,7 +666,7 @@ class ButtCommands(Cog):
         full_title = self.db["movies"].find_one({'title': self.clean_search(title)}).get('title')
 
         # If the movie has not been watched as part of the BUTT Movie Night, let the commander know
-        movie = self.db["movies"].find_one({'title': self.clean_case(title), 'last_win_date':{'$exists': True}})
+        movie = self.db["movies"].find_one({'title': self.clean_search(title), 'last_win_date':{'$exists': True}})
         if movie is None:
             await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
             return
