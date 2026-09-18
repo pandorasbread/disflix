@@ -164,13 +164,15 @@ class ButtCommands(Cog):
             if command == '$deletevotes':
                 await self.delete_owned_votes(msg)
             if command == '$rate':
-                await self.rate_movie(content, msg)
+                await self.rate_movie2(content, msg)
             if command == '$myratings':
                 await self.get_user_ratings(msg)
             if command == '$ratings':
                 await self.get_movie_ratings(content, msg)
             if command == '$topratings':
                 await self.get_top_ratings(msg)
+            if command == '$migrateratings':
+                await self.migrate_ratings()
             # if command == '$swap':
             #if command == '$roll':
             #if command == '$rollall':
@@ -679,6 +681,74 @@ class ButtCommands(Cog):
             await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
         else: 
             self.db.movieratings.insert_one({'user_id': user_id, 'movie': full_title, 'rating': rating})
+            await msg.add_reaction('🍿')
+            await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
+
+    async def rate_movie2(self, rating_info: str, msg: Message):
+        # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
+        rating, title = rating_info.split(" ", maxsplit=1)
+        delete_rating = False
+
+        # If rating is a 'x', set the rating to be deleted
+        if rating == 'x':
+            delete_rating = True
+            rating: float = 0.0
+        else:
+            try:
+                rating: float = round(float(rating), 2)
+                # Check to see if rating is between 0 and 10.0
+                if not 0 <= rating <= 10.0:
+                    await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10.')
+                    return
+            except ValueError:
+                # If the value i
+                await msg.channel.send(f'Hey, you gotta put the rating then the movie name first bub. Ex `$rate 10 Your Mom`')
+                return
+
+        # Get the User of the command
+        self.check_user(msg.author)
+        user: User = self.db.users.find_one({"username": msg.author.id})#.get('_id')
+        user_id = user['_id']
+
+        # Use the Title saves in the Movies table
+        full_title = self.db.movies.find_one({'title': self.clean_search(title)}).get('title')
+
+        if delete_rating:
+            user_rating = next((x['rating'] for x in user['user_ratings'] if x['title']==full_title), None)
+
+            self.db.users.update_one({"_id": user_id}, {"$pull": {"user_ratings": {"title": full_title}}})
+            #self.db.movies.update_one({"name": self.clean_case(title)}, {"movie_rating": {"sum": movie_rating.sum - user_rating, "rating_count": movie_rating.rating_count - 1}})
+            self.db.movies.update_one({"title": full_title}, {"$inc": {"movie_rating.sum": -user_rating, "movie_rating.rating_count": -1}})
+            await msg.channel.send(f'{full_title}\'s rating has been deleted')
+            return
+
+        # Shouldn't ever hit here, but if title and rating are none, send a message back
+        if title is None and rating is None:
+            await msg.channel.send('You didn\'t even put a movie or a rating...')
+
+        # Check if movie exists. If not, send back a message
+        if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
+            await msg.channel.send(f'Movie {title} does not exist.')
+            return
+
+
+
+        # If the movie has not been watched as part of the BUTT Movie Night, let the commander know
+        movie = self.db.movies.find_one({'title': self.clean_search(title), 'last_win_date':{'$exists': True}})
+        if movie is None:
+            await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
+            return
+
+        # If already rated before, update the row. If not, add a new row.
+        if self.db.users.count_documents({'user_ratings.title': full_title}) != 0:
+            user_rating = next((x['rating'] for x in user['user_ratings'] if x['title']==full_title), None)
+            self.db.users.update_one({"_id": user_id, "user_ratings.title": full_title}, {"$set": {"user_ratings.$.rating": rating}})
+            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.sum': rating - user_rating}}, upsert=True)
+            await msg.add_reaction('🍿')
+            await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
+        else:
+            self.db.users.update_one({"_id": user_id},{"$addToSet": {"user_ratings": {"title": full_title, "rating": rating}}})
+            self.db.movies.update_one({'title': full_title},{'$inc': {'movie_rating.rating_count': 1, 'movie_rating.sum': rating}}, upsert=True)
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 

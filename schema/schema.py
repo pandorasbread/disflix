@@ -5,14 +5,18 @@ from typing import TypedDict
 
 from bson import ObjectId
 
+class MovieRating:
+    rating_count: int
+    sum: int
 
 class Movie(TypedDict):
     _id: ObjectId
-    name: str
+    title: str
     originator: str
     nominated: bool
     nominator: str
     last_win_date: datetime
+    movie_rating: MovieRating
     #TODO: Add MovieRatings { numRatings: int, sum: int }
 
 class Poll(TypedDict):
@@ -29,11 +33,15 @@ class Role(TypedDict):
     role: str
     role_id: int
 
+class UserRating(TypedDict):
+    title: str
+    rating: int
+
 class User(TypedDict):
     _id: ObjectId
     username: int
     out: bool
-    #TODO: Add UserRatings { {movie: str, rating: int}, etc}
+    user_ratings: list[UserRating]
 
 class VoteBuy(TypedDict):
     _id: ObjectId
