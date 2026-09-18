@@ -10,6 +10,7 @@ from discord.ext.commands import Bot
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv, find_dotenv
 from cogs.utils import cogutils
+from schema.schema import *
 import os
 import base64
 import re
@@ -117,7 +118,7 @@ class ButtCommands(Cog):
                 await msg.channel.send('Nominating \'' + randmovie + '\'.')
                 await self.nominate_movie(randmovie, msg)
             if command == '$clear':
-                self.db["movies"].update_many({"nominated": True}, {'$set': {"nominated": False, 'nominator': None}})
+                self.db.movies.update_many({"nominated": True}, {'$set': {"nominated": False, 'nominator': None}})
                 await msg.add_reaction('🧻')
             if command == '$mymovies':
                 mymovies = self.get_my_movies(msg.author)
@@ -138,11 +139,11 @@ class ButtCommands(Cog):
                 await self.historical_add(content, msg)
             if command == '$out':
                 self.check_user(msg.author)
-                self.db["users"].update_one({"username":msg.author.id}, {"$set": {"out":True}})
+                self.db.users.update_one({"username":msg.author.id}, {"$set": {"out":True}})
                 await msg.add_reaction('🏃')
             if command == '$in':
                 self.check_user(msg.author)
-                self.db["users"].update_one({"username":msg.author.id}, {"$set": {"out":False}})
+                self.db.users.update_one({"username":msg.author.id}, {"$set": {"out":False}})
                 await msg.add_reaction('👁')
             if command == '$movierole':
                 await self.addrole(content, msg, 'movie_watcher')
@@ -217,11 +218,11 @@ class ButtCommands(Cog):
 
         result = ""
 
-        role = self.db["roles"].find_one({"server_id": msg.guild.id, "role": rolename})
+        role = self.db.roles.find_one({"server_id": msg.guild.id, "role": rolename})
         if role is None:
-            self.db["roles"].insert_one({"server_id": msg.guild.id, "role": rolename, "role_id": role_id})
+            self.db.roles.insert_one({"server_id": msg.guild.id, "role": rolename, "role_id": role_id})
         else:
-            self.db["roles"].update_one({"server_id": msg.guild.id, "role": rolename}, {"$set": {"role_id": role_id}})
+            self.db.roles.update_one({"server_id": msg.guild.id, "role": rolename}, {"$set": {"role_id": role_id}})
             return await msg.channel.send(rolename + " changed from " + server.get_role(role.get("role_id")).name + " to " + server.get_role(role_id).name + '. ')
 
         return await msg.channel.send(rolename + " is now assigned to " + server.get_role(role_id).name + '.')
@@ -229,37 +230,37 @@ class ButtCommands(Cog):
     async def withdraw_movie(self, content: str, msg: Message):
         self.check_user(msg.author)
         if not content:
-            self.db["movies"].update_many(
-                {"nominated": True, "nominator": self.db["users"].find_one({"username": msg.author.id}).get('_id')},
+            self.db.movies.update_many(
+                {"nominated": True, "nominator": self.db.users.find_one({"username": msg.author.id}).get('_id')},
                 {"$set": {"nominated": False, "nominator": None}})
         else:
-            nommedmovie = self.db["movies"].find_one({"title": self.clean_case(content), "nominated": True})
+            nommedmovie = self.db.movies.find_one({"title": self.clean_case(content), "nominated": True})
             if nommedmovie is None:
                 return await msg.channel.send('Are you sure that ' + content + ' is nominated?')
-            nominator = self.db["users"].find_one({'_id': nommedmovie.get('nominator')})
+            nominator = self.db.users.find_one({'_id': nommedmovie.get('nominator')})
             if nominator.get('username') != msg.author.id:
                 nominatoruser = await self.bot.fetch_user(nominator.get('username'))
                 return await msg.channel.send(content + ' must be removed by the nominator, ' + nominatoruser.display_name + '.')
-            self.db["movies"].update_one(
+            self.db.movies.update_one(
                 {"title": self.clean_case(content), "nominated": True}, {"$set": {"nominated": False, "nominator": None}})
         await msg.add_reaction('🧻')
 
     async def have_we_watched(self, searchtext: str, msg: Message):
         watched = []
         if (searchtext is None):
-            watched = self.db["movies"].find({'last_win_date': {'$exists': True }})
+            watched = self.db.movies.find({'last_win_date': {'$exists': True }})
         else:
-            movie = self.db["movies"].find_one({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
+            movie = self.db.movies.find_one({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
             if movie is not None:
-                watched = self.db["movies"].find({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
+                watched = self.db.movies.find({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
             else:
                 result = '`' + searchtext + '` has not been watched.'
-                messyfind = self.db["movies"].find_one({'title': self.clean_search(searchtext), 'last_win_date':{'$exists': True}})
+                messyfind = self.db.movies.find_one({'title': self.clean_search(searchtext), 'last_win_date':{'$exists': True}})
                 if messyfind is None:
                     return await msg.channel.send(result)
                 result += ' Maybe one of these is what you are looking for?'
                 await msg.channel.send(result)
-                watched = self.db["movies"].find({'title': self.clean_search(searchtext), 'last_win_date': {'$exists': True}})
+                watched = self.db.movies.find({'title': self.clean_search(searchtext), 'last_win_date': {'$exists': True}})
 
         watched = watched.sort('last_win_date', pymongo.ASCENDING)
 
@@ -271,8 +272,8 @@ class ButtCommands(Cog):
             await msg.channel.send(embed=embed)
 
     async def score(self, msg: Message):
-        films = list(self.db["movies"].find({"last_win_date": {'$exists': True}}))
-        users = list(self.db["users"].find())
+        films = list(self.db.movies.find({"last_win_date": {'$exists': True}}))
+        users = list(self.db.users.find())
         scores = dict()
         for film in films:
             nom = film.get("originator")
@@ -306,7 +307,7 @@ class ButtCommands(Cog):
         if searchtext is None:
             return await msg.channel.send('You forgot to enter something to search for, I think.')
 
-        films = self.db["movies"].find({'title': self.clean_search(searchtext)}).sort('title', pymongo.ASCENDING)
+        films = self.db.movies.find({'title': self.clean_search(searchtext)}).sort('title', pymongo.ASCENDING)
         def description_builder(movie):
             lwd = movie.get('last_win_date')
             desc = movie.get('title')
@@ -329,21 +330,21 @@ class ButtCommands(Cog):
 
         self.check_user(msg.author)
         isNew = await self.add_plain(title, msg, True)
-        lastwindate = self.db["movies"].find_one({'title': self.clean_case(title)}).get('last_win_date')
+        lastwindate = self.db.movies.find_one({'title': self.clean_case(title)}).get('last_win_date')
         if lastwindate is not None and lastwindate > histdate:
             return await msg.channel.send(title + ' last won on ' + str(lastwindate.date()) + ', which is more recent than ' + str(histdate.date()) + '.')
 
-        self.db["movies"].update_one({'title': self.clean_case(title)}, {'$set': {'last_win_date': histdate}})
+        self.db.movies.update_one({'title': self.clean_case(title)}, {'$set': {'last_win_date': histdate}})
         return await msg.add_reaction('📅')
 
 
 
     def get_my_movies(self, user: Message.author, only_free: bool = False):
         self.check_user(user)
-        user_id = self.db["users"].find_one({"username": user.id}).get('_id')
+        user_id = self.db.users.find_one({"username": user.id}).get('_id')
         if only_free:
-            return self.db["movies"].find({'originator': user_id, 'nominated': False, "last_win_date": {'$exists': False}})
-        return self.db["movies"].find({'originator': user_id})
+            return self.db.movies.find({'originator': user_id, 'nominated': False, "last_win_date": {'$exists': False}})
+        return self.db.movies.find({'originator': user_id})
 
     def tag_role(self, rolename: str, server: discord.Guild):
         role = self.db['roles'].find_one({'server_id': server.id, 'role': rolename})
@@ -369,7 +370,7 @@ class ButtCommands(Cog):
                 self.db['polls'].update_one({'message_id': activepoll.get('message_id')}, {'$set': {'open': False}})
 
 
-        movies = self.db["movies"].find({"nominated": True})
+        movies = self.db.movies.find({"nominated": True})
         movies = self.movies_with_in_nominators(movies)
         titles = [movie['title'] for movie in self.movies_with_in_nominators(movies)]
         duration = datetime.timedelta(hours=24)
@@ -404,7 +405,7 @@ class ButtCommands(Cog):
         if len(winners) == 1:
             await msg.channel.send(self.tag_role('movie_watcher', msg.guild) + winners[0].text + ' is the winner!')
             self.db['movies'].update_one({'title': self.clean_case(winners[0].text)}, {'$set': {'last_win_date': datetime.datetime.today()}})
-            nominators_out = [user['_id'] for user in self.db["users"].find({"out": False})]
+            nominators_out = [user['_id'] for user in self.db.users.find({"out": False})]
             self.db['movies'].update_many({'nominated': True, 'nominator': {'$in': nominators_out}}, {'$set': {'nominated': False, 'nominator': None}})
             self.db['polls'].update_one({'message_id': poll.get('message_id')}, {'$set': {'open':False}})
             self.db['users'].update_many({}, {'$set': {'out':False}})
@@ -418,7 +419,7 @@ class ButtCommands(Cog):
             await self.run_poll(msg, True)
 
     async def get_nominations(self, channel: Messageable):
-        nominated_movies = self.db["movies"].find({"nominated": True})
+        nominated_movies = self.db.movies.find({"nominated": True})
         movies = self.movies_with_in_nominators(nominated_movies)
         titles = [[movie['title'], movie.get('last_win_date')] for movie in movies]
         msg = discord.Embed(colour=discord.Colour.yellow(), title='Current Nominations', description='')
@@ -433,7 +434,7 @@ class ButtCommands(Cog):
         await channel.send(embed=msg)
 
     def movies_with_in_nominators(self, nominated_movies):
-        nominators_out = [user['_id'] for user in self.db["users"].find({"out": True})]
+        nominators_out = [user['_id'] for user in self.db.users.find({"out": True})]
         movies = []
         for movie in nominated_movies:
             if movie.get("nominator") not in nominators_out:
@@ -442,15 +443,15 @@ class ButtCommands(Cog):
 
     async def nominate_movie(self, title: str, msg: Message):
         isNew = await self.add_plain(title, msg)
-        isNominated = self.db["movies"].count_documents({'title': self.clean_case(title), 'nominated': True}) != 0
+        isNominated = self.db.movies.count_documents({'title': self.clean_case(title), 'nominated': True}) != 0
         if not isNew and isNominated:
-            nominatorid = self.db["movies"].find_one({'title': self.clean_case(title)}).get('nominator')
-            nominator = self.db["users"].find_one({'_id': nominatorid}).get('username')
+            nominatorid = self.db.movies.find_one({'title': self.clean_case(title)}).get('nominator')
+            nominator = self.db.users.find_one({'_id': nominatorid}).get('username')
             user = await self.bot.fetch_user(nominator)
             await msg.channel.send(title + ' already nominated by ' + user.display_name)
         else:
             self.check_user(msg.author)
-            self.db["movies"].update_one({"title": self.clean_case(title)}, {"$set": {"nominated": True, "nominator": self.db["users"].find_one({"username": msg.author.id}).get('_id')}})
+            self.db.movies.update_one({"title": self.clean_case(title)}, {"$set": {"nominated": True, "nominator": self.db.users.find_one({"username": msg.author.id}).get('_id')}})
             last_win = self.db['movies'].find_one({'title': self.clean_case(title)}).get('last_win_date')
             if last_win is not None:
                 await msg.channel.send(title + ' won on ' + str(last_win.date()))
@@ -463,10 +464,10 @@ class ButtCommands(Cog):
             return await msg.channel.send('You forgot to enter something to nominate, I think.')
 
         if user_nominated:
-            user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
-            films = self.db["movies"].find({'title': self.clean_search(title), 'nominated': False, 'originator': user_id}).sort('title', pymongo.ASCENDING)
+            user_id = self.db.users.find_one({"username": msg.author.id}).get('_id')
+            films = self.db.movies.find({'title': self.clean_search(title), 'nominated': False, 'originator': user_id}).sort('title', pymongo.ASCENDING)
         else:
-            films = self.db["movies"].find({'title': self.clean_search(title), 'nominated': False}).sort('title', pymongo.ASCENDING)
+            films = self.db.movies.find({'title': self.clean_search(title), 'nominated': False}).sort('title', pymongo.ASCENDING)
         film = None
 
         for f in films:
@@ -486,8 +487,8 @@ class ButtCommands(Cog):
         if title is None:
             return await msg.channel.send('You forgot to enter something to steal, I think.')
 
-        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
-        films = self.db["movies"].find({'title': self.clean_search(title), '$or':[{'nominated': False}, {'nominated': {'$exists':False}}]}).sort('title',
+        user_id = self.db.users.find_one({"username": msg.author.id}).get('_id')
+        films = self.db.movies.find({'title': self.clean_search(title), '$or':[{'nominated': False}, {'nominated': {'$exists':False}}]}).sort('title',
                                                                                                      pymongo.ASCENDING)
         film = None
         for f in films:
@@ -503,33 +504,33 @@ class ButtCommands(Cog):
             return await msg.channel.send('`'+film['title']+'` is your own movie, stealing it is legal and thus I will not assist you.')
 
 
-        old_user = await self.bot.fetch_user(self.db["users"].find_one({"_id": film['originator']}).get('username'))
+        old_user = await self.bot.fetch_user(self.db.users.find_one({"_id": film['originator']}).get('username'))
         await msg.channel.send('⛵😏'+ msg.author.name + '🏴‍☠️' + film['title'] + '🏴‍☠️  🌊🏝️🥺' + old_user.display_name)
 
-        self.db["movies"].update_one({'title': self.clean_case(film['title'])}, {'$set': {'originator': user_id}})
+        self.db.movies.update_one({'title': self.clean_case(film['title'])}, {'$set': {'originator': user_id}})
         return await self.nominate_movie(film['title'], msg)
 
 
 
     def check_user(self, user: Message.author):
-        if self.db["users"].count_documents({"username": user.id}) == 0:
-            self.db["users"].insert_one({"username": user.id, "out": False})
+        if self.db.users.count_documents({"username": user.id}) == 0:
+            self.db.users.insert_one({"username": user.id, "out": False})
 
     async def add_movie(self, title: str, msg: Message):
         isNew = await self.add_plain(title, msg)
         if not isNew:
-            originatorid = self.db["movies"].find_one({'title': self.clean_case(title)}).get('originator')
-            originator = self.db["users"].find_one({'_id': originatorid}).get('username')
+            originatorid = self.db.movies.find_one({'title': self.clean_case(title)}).get('originator')
+            originator = self.db.users.find_one({'_id': originatorid}).get('username')
             user = await self.bot.fetch_user(originator)
             await msg.channel.send(title + ' already added by ' + user.display_name)
 
     async def add_plain(self, title: str, msg: Message, frombot: bool = False) -> bool:
         if len(title) > 55:
             raise Exception('Movie names cannot be over 55 characters long.')
-        isNew = self.db["movies"].count_documents({'title': self.clean_case(title)}) == 0
+        isNew = self.db.movies.count_documents({'title': self.clean_case(title)}) == 0
         if isNew:
             originator = self.bot.application_id if frombot else msg.author.id
-            self.db["movies"].insert_one({"title": title, "originator": self.db["users"].find_one({'username': originator}).get('_id'), 'nominated': False})
+            self.db.movies.insert_one({"title": title, "originator": self.db.users.find_one({'username': originator}).get('_id'), 'nominated': False})
             await msg.add_reaction('👍')
         return isNew
 
@@ -537,8 +538,8 @@ class ButtCommands(Cog):
         return
 
     async def delete_movie(self, title: str, msg: Message):
-        if self.db["movies"].count_documents({"title": self.clean_case(title), "originator":self.db["users"].find_one({'username': msg.author.id}).get('_id')}) != 0:
-            self.db["movies"].delete_one({"title": self.clean_case(title), "originator":self.db["users"].find_one({'username': msg.author.id}).get('_id')})
+        if self.db.movies.count_documents({"title": self.clean_case(title), "originator":self.db.users.find_one({'username': msg.author.id}).get('_id')}) != 0:
+            self.db.movies.delete_one({"title": self.clean_case(title), "originator":self.db.users.find_one({'username': msg.author.id}).get('_id')})
             await msg.add_reaction('🗑')
         else:
             await msg.channel.send('Movies can only be removed by the user who added them or the movie has already been deleted.')
@@ -556,14 +557,14 @@ class ButtCommands(Cog):
         # Get User information
         voter_user = await self.bot.fetch_user(voter_id_int)
         buyer_user = await self.bot.fetch_user(msg.author.id)
-        if self.db["votebuys"].count_documents({'voter': voter_user.id, 'chump': buyer_user.id}) != 0:
+        if self.db.votebuys.count_documents({'voter': voter_user.id, 'chump': buyer_user.id}) != 0:
              # If data of the Voter and Chump already exist, update the `numberVotes` by 1
-            bribe_info = self.db["votebuys"].find_one_and_update({'voter': voter_user.id, 'chump': buyer_user.id},{"$inc": {"numberVotes": 1}}).get("numberVotes")
+            bribe_info = self.db.votebuys.find_one_and_update({'voter': voter_user.id, 'chump': buyer_user.id},{"$inc": {"numberVotes": 1}}).get("numberVotes")
             await msg.channel.send(voter_user.display_name + ' has has a vote bought again by ' + buyer_user.display_name + ' and now has ' + str(bribe_info + 1) + ' votes bought.'
                                    + voter_user.display_name + ', please vote for the bought vote movie or face the wrath of the BUTTDFV.') # You don't want this!!
         else:
             # If data of the Voter and Chump doesnt exist, start a new count
-            self.db["votebuys"].insert_one({'voter': voter_user.id, 'chump': buyer_user.id, "numberVotes": 1})
+            self.db.votebuys.insert_one({'voter': voter_user.id, 'chump': buyer_user.id, "numberVotes": 1})
             await msg.channel.send(voter_user.display_name + ' has had a vote bought by ' + buyer_user.display_name)
        
     async def use_user_vote(self, chump: str, msg: Message):
@@ -574,9 +575,9 @@ class ButtCommands(Cog):
         chump_user = await self.bot.fetch_user(chump_id_int)
         voter_user = await self.bot.fetch_user(msg.author.id)
         # Check to see if the Voter and Chump relationship exists and if there is at least one vote
-        if self.db["votebuys"].count_documents({'voter': voter_user.id, 'chump': chump_user.id}) != 0 and self.db["votebuys"].find_one({'voter': voter_user.id, 'chump': chump_user.id}).get('numberVotes') > 0:
+        if self.db.votebuys.count_documents({'voter': voter_user.id, 'chump': chump_user.id}) != 0 and self.db.votebuys.find_one({'voter': voter_user.id, 'chump': chump_user.id}).get('numberVotes') > 0:
             # If data of the Voter and Chump exists, decrease the `numberVotes` by 1
-            bribe_info = self.db["votebuys"].find_one_and_update({'voter': voter_user.id, 'chump': chump_user.id},{"$inc": {"numberVotes": -1}}).get("numberVotes")
+            bribe_info = self.db.votebuys.find_one_and_update({'voter': voter_user.id, 'chump': chump_user.id},{"$inc": {"numberVotes": -1}}).get("numberVotes")
             await msg.channel.send(voter_user.display_name + ' has used a bribed vote from ' + chump_user.display_name + '.  ' 
                                    + chump_user.display_name + ' must now vote for the movie that ' + voter_user.display_name + ' says or they will face the wrath of the BUTTDVF') # You don't want this!!
             if (bribe_info - 1) > 0:
@@ -589,7 +590,7 @@ class ButtCommands(Cog):
     async def get_owned_votes(self, msg: Message):
         self.check_user(msg.author)
         voter_user = await self.bot.fetch_user(msg.author.id)
-        return self.db["votebuys"].find({'voter': voter_user.id})
+        return self.db.votebuys.find({'voter': voter_user.id})
     
     async def delete_owned_votes(self, msg: Message):
         def check(message: Message):
@@ -603,7 +604,7 @@ class ButtCommands(Cog):
             reply: Message = await self.bot.wait_for('message', check=check, timeout=60.0)
             if reply.content == 'YES':
                 voter_user = await self.bot.fetch_user(msg.author.id)
-                self.db["votebuys"].delete_many({'voter': voter_user.id})
+                self.db.votebuys.delete_many({'voter': voter_user.id})
                 await msg.add_reaction('🗑')
                 await msg.channel.send("All saved votes have been deleted")
             else: 
@@ -645,11 +646,11 @@ class ButtCommands(Cog):
 
         # Get the User of the command 
         self.check_user(msg.author)
-        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
+        user_id = self.db.users.find_one({"username": msg.author.id}).get('_id')
 
         # If the rating as a 'x', delete the rating
         if delete_rating:
-            self.db["movieratings"].delete_one({"movie": self.clean_case(title), "user_id": user_id})
+            self.db.movieratings.delete_one({"movie": self.clean_case(title), "user_id": user_id})
             await msg.channel.send(f'{title}\'s rating has been deleted')
             return
 
@@ -658,26 +659,26 @@ class ButtCommands(Cog):
             await msg.channel.send('You didn\'t even put a movie or a rating...')
 
         # Check if movie exists. If not, send back a message
-        if self.db["movies"].count_documents({'title': self.clean_search(title)}) == 0:
+        if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
             await msg.channel.send(f'Movie {title} does not exist.')
             return
 
         # Use the Title saves in the Movies table
-        full_title = self.db["movies"].find_one({'title': self.clean_search(title)}).get('title')
+        full_title = self.db.movies.find_one({'title': self.clean_search(title)}).get('title')
 
         # If the movie has not been watched as part of the BUTT Movie Night, let the commander know
-        movie = self.db["movies"].find_one({'title': self.clean_search(title), 'last_win_date':{'$exists': True}})
+        movie = self.db.movies.find_one({'title': self.clean_search(title), 'last_win_date':{'$exists': True}})
         if movie is None:
             await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
             return
 
         # If already rated before, update the row. If not, add a new row. 
-        if self.db["movieratings"].count_documents({'user_id': user_id, 'movie': full_title}) != 0:
-            self.db["movieratings"].find_one_and_update({'user_id': user_id, 'movie': full_title},{'$set': { 'rating': rating }})
+        if self.db.movieratings.count_documents({'user_id': user_id, 'movie': full_title}) != 0:
+            self.db.movieratings.find_one_and_update({'user_id': user_id, 'movie': full_title},{'$set': { 'rating': rating }})
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
         else: 
-            self.db["movieratings"].insert_one({'user_id': user_id, 'movie': full_title, 'rating': rating})
+            self.db.movieratings.insert_one({'user_id': user_id, 'movie': full_title, 'rating': rating})
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 
@@ -685,8 +686,8 @@ class ButtCommands(Cog):
     async def get_user_ratings(self, msg: Message):
         # Get the username and their list of movie reviews
         self.check_user(msg.author)
-        user_id = self.db["users"].find_one({"username": msg.author.id}).get('_id')
-        ratings = self.db["movieratings"].find({'user_id': user_id}).sort('movie', pymongo.ASCENDING)
+        user_id = self.db.users.find_one({"username": msg.author.id}).get('_id')
+        ratings = self.db.movieratings.find({'user_id': user_id}).sort('movie', pymongo.ASCENDING)
 
         # Output each movie and its rating into new lines
         embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings', description='')
@@ -696,16 +697,21 @@ class ButtCommands(Cog):
         await msg.channel.send(embed=embed)
 
     async def get_movie_ratings(self, title: str, msg: Message):
+
+        if title == None:
+            await msg.channel.send(f'Didja forget a title?')
+            return
+
         # Check if movie exists. If not, send back a message
-        if self.db["movies"].count_documents({'title': self.clean_search(title)}) == 0:
+        if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
             await msg.channel.send(f'Movie {title} does not exist.')
             return
 
         # Get Ratings in Desending (Highest Rating Value) order
-        ratings = self.db["movieratings"].find({'movie': self.clean_search(title)}).sort('rating', pymongo.DESCENDING)
+        ratings = self.db.movieratings.find({'movie': self.clean_search(title)}).sort('rating', pymongo.DESCENDING)
 
         # Use the Title saves in the Movies table
-        full_title = self.db["movies"].find_one({'title': self.clean_search(title)}).get('title')
+        full_title = self.db.movies.find_one({'title': self.clean_search(title)}).get('title')
 
         embed = discord.Embed(colour=discord.Colour.orange(), title=f'Ratings for {full_title}', description='')
 
@@ -714,8 +720,8 @@ class ButtCommands(Cog):
 
         # For each rating, get the username of the member who rated it and their rating per line. 
         for rating in ratings:
-            username = self.db["users"].find_one({"_id": rating.get('user_id')}).get('username')
-            user = await self.bot.fetch_user(str(username))
+            username = self.db.users.find_one({"_id": rating.get('user_id')}).get('username')
+            user = await self.bot.fetch_user(username)
             embed.description += user.name + ' - ' + str(rating.get('rating'))
             embed.description += '\n'
             added_ratings += rating.get('rating')
@@ -732,7 +738,7 @@ class ButtCommands(Cog):
         MAX_RATINGS = 10  # Current Max number of Top Movie ratings
 
         # Get the list of every distinct movie title in the `movieratings` table
-        ratings = self.db["movieratings"]
+        ratings = self.db.movieratings
         unique_movies = ratings.distinct('movie')
 
         movie_reviews: list = []
@@ -741,13 +747,13 @@ class ButtCommands(Cog):
         for movie in unique_movies:
             added_ratings: float = 0.0
             total_ratings: int = 0
-            ratings = self.db["movieratings"].find({'movie': self.clean_search(movie)}).sort('rating', pymongo.DESCENDING)
+            ratings = self.db.movieratings.find({'movie': self.clean_search(movie)}).sort('rating', pymongo.DESCENDING)
 
             # If Movie doesnt exist, skip it. Could be bad test data or something fucked up
-            if self.db["movies"].find_one({'title': self.clean_search(movie)}) is None:
+            if self.db.movies.find_one({'title': self.clean_search(movie)}) is None:
                 continue
 
-            full_title = self.db["movies"].find_one({'title': self.clean_search(movie)}).get('title')
+            full_title = self.db.movies.find_one({'title': self.clean_search(movie)}).get('title')
 
             for rating in ratings:
                 added_ratings += rating.get('rating')
