@@ -48,7 +48,7 @@ class VoteBuy(TypedDict):
 
 class MovieRatings(TypedDict):
     _id: ObjectId
-    user_id: int
+    user_id: ObjectId
     movie: str
     rating: int
 
