@@ -166,11 +166,11 @@ class ButtCommands(Cog):
             if command == '$rate':
                 await self.rate_movie2(content, msg)
             if command == '$myratings':
-                await self.get_user_ratings(msg)
+                await self.get_user_ratings2(msg)
             if command == '$ratings':
-                await self.get_movie_ratings(content, msg)
+                await self.get_movie_ratings2(content, msg)
             if command == '$topratings':
-                await self.get_top_ratings(msg)
+                await self.get_top_ratings2(msg)
             if command == '$migrateratings':
                 await self.migrate_ratings()
             # if command == '$swap':
@@ -717,10 +717,9 @@ class ButtCommands(Cog):
             user_rating = next((x['rating'] for x in user['user_ratings'] if x['title']==full_title), None)
 
             self.db.users.update_one({"_id": user_id}, {"$pull": {"user_ratings": {"title": full_title}}})
-            #self.db.movies.update_one({"name": self.clean_case(title)}, {"movie_rating": {"sum": movie_rating.sum - user_rating, "rating_count": movie_rating.rating_count - 1}})
-            self.db.movies.update_one({"title": full_title}, {"$inc": {"movie_rating.sum": -user_rating, "movie_rating.rating_count": -1}})
-            await msg.channel.send(f'{full_title}\'s rating has been deleted')
-            return
+            self.db.movies.update_one({"title": full_title}, {"$inc": {"movie_rating.sum": -user_rating, "movie_rating.count": -1}})
+            return await msg.channel.send(f'{full_title}\'s rating has been deleted')
+
 
         # Shouldn't ever hit here, but if title and rating are none, send a message back
         if title is None and rating is None:
@@ -728,12 +727,8 @@ class ButtCommands(Cog):
 
         # Check if movie exists. If not, send back a message
         if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
-            await msg.channel.send(f'Movie {title} does not exist.')
-            return
+            return await msg.channel.send(f'Movie {title} does not exist.')
 
-
-
-        # If the movie has not been watched as part of the BUTT Movie Night, let the commander know
         movie = self.db.movies.find_one({'title': self.clean_search(title), 'last_win_date':{'$exists': True}})
         if movie is None:
             await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
@@ -748,7 +743,7 @@ class ButtCommands(Cog):
             await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
         else:
             self.db.users.update_one({"_id": user_id},{"$addToSet": {"user_ratings": {"title": full_title, "rating": rating}}})
-            self.db.movies.update_one({'title': full_title},{'$inc': {'movie_rating.rating_count': 1, 'movie_rating.sum': rating}}, upsert=True)
+            self.db.movies.update_one({'title': full_title},{'$inc': {'movie_rating.count': 1, 'movie_rating.sum': rating}}, upsert=True)
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 
@@ -764,6 +759,50 @@ class ButtCommands(Cog):
         for rating in ratings:
             embed.description += rating.get('movie') + " - " + str(rating.get('rating'))
             embed.description += '\n'
+        await msg.channel.send(embed=embed)
+
+    async def get_user_ratings2(self, msg: Message):
+        # Get the username and their list of movie reviews
+        self.check_user(msg.author)
+        ratings: list(UserRating) = self.db.users.find_one({"username": msg.author.id}).get('user_ratings')
+        ratings.sort(key=lambda x: x['title'])
+        # Output each movie and its rating into new lines
+        embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings', description='')
+        for rating in ratings:
+            embed.description += rating['title'] + " - " + str(rating['rating'])
+            embed.description += '\n'
+        await msg.channel.send(embed=embed)
+
+    async def get_movie_ratings2(self, title: str, msg: Message):
+        if title == None:
+            await msg.channel.send(f'Didja forget a title?')
+            return
+
+        # Check if movie exists. If not, send back a message
+        if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
+            await msg.channel.send(f'Movie {title} does not exist.')
+            return
+
+        # Get Ratings in Desending (Highest Rating Value) order
+        movie: Movie = self.db.movies.find_one({'title': self.clean_search(title)})
+
+        embed = discord.Embed(colour=discord.Colour.orange(), title=f'Ratings for {movie["title"]}', description='')
+
+        users_that_rated: list[User] = list(self.db.users.find({"user_ratings.title": movie['title']}))
+        if len(users_that_rated) == 0:
+            return await msg.channel.send(f'Movie has not been rated.')
+        # For each rating, get the username of the member who rated it and their rating per line.
+        for rating in users_that_rated:
+            username = rating['username']
+            user = await self.bot.fetch_user(username)
+            embed.description += user.name + ' - ' + str(next((x['rating'] for x in rating['user_ratings'] if x['title'] == movie['title']), 'N/A'))
+            embed.description += '\n'
+
+        # Calculate the average
+        average: float = movie['movie_rating']['sum'] / movie['movie_rating']['count']
+        embed.description += '\n'
+        embed.description += f'**Average Rating:**  {str(round(average, 2))}'
+
         await msg.channel.send(embed=embed)
 
     async def get_movie_ratings(self, title: str, msg: Message):
@@ -803,6 +842,18 @@ class ButtCommands(Cog):
         embed.description += f'**Average Rating:**  {str(round(average, 2))}'
 
         await msg.channel.send(embed=embed)
+
+    async def get_top_ratings2(self, msg: Message):
+        MAX_RATINGS = 10  # Current Max number of Top Movie ratings
+        # Get the list of every distinct movie title in the `movieratings` table
+        movies: list[Movie] = list(self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}}))
+        movies.sort(key=lambda x: round(x['movie_rating']['sum'] / x['movie_rating']['count'], 2), reverse=True)
+        def description_builder(mov):
+            average: float = round(mov['movie_rating']['sum'] / mov['movie_rating']['count'], 2)
+            return f'## **{mov["title"]}** - **{str(average)}**\n'
+
+        for embed in cogutils.get_safe_embeds(movies[:MAX_RATINGS], description_builder, 'Top Movie Reviews', discord.Colour.yellow()):
+            await msg.channel.send(embed=embed)
 
     async def get_top_ratings(self, msg: Message):
         MAX_RATINGS = 10  # Current Max number of Top Movie ratings
