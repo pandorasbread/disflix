@@ -1,19 +1,20 @@
-#https://www.mongodb.com/community/forums/t/defining-data-schema-using-pymongo/8533/2
-#https://earthly.dev/blog/pymongo-advanced/
 from datetime import datetime
 from typing import TypedDict
 
 from bson import ObjectId
 
+class MovieRating:
+    count: int
+    sum: int
 
 class Movie(TypedDict):
     _id: ObjectId
-    name: str
+    title: str
     originator: str
     nominated: bool
     nominator: str
     last_win_date: datetime
-    #TODO: Add MovieRatings { numRatings: int, sum: int }
+    movie_rating: MovieRating
 
 class Poll(TypedDict):
     _id: ObjectId
@@ -29,11 +30,15 @@ class Role(TypedDict):
     role: str
     role_id: int
 
+class UserRating(TypedDict):
+    title: str
+    rating: int
+
 class User(TypedDict):
     _id: ObjectId
     username: int
     out: bool
-    #TODO: Add UserRatings { {movie: str, rating: int}, etc}
+    user_ratings: list[UserRating]
 
 class VoteBuy(TypedDict):
     _id: ObjectId
@@ -41,10 +46,9 @@ class VoteBuy(TypedDict):
     chump: int
     numberVotes: int
 
-#TODO: Deprecate into movie and user ratings, run script to backfill
 class MovieRatings(TypedDict):
     _id: ObjectId
-    user_id: int
+    user_id: ObjectId
     movie: str
     rating: int
 
