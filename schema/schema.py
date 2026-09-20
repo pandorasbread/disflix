@@ -46,10 +46,4 @@ class VoteBuy(TypedDict):
     chump: int
     numberVotes: int
 
-class MovieRatings(TypedDict):
-    _id: ObjectId
-    user_id: ObjectId
-    movie: str
-    rating: int
-
 

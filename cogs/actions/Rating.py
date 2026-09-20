@@ -135,10 +135,10 @@ class Rating(BaseAction):
                                               discord.Colour.yellow()):
             await msg.channel.send(embed=embed)
 
-    async def migrate_ratings(self, msg):
-        legacy_ratings: list[MovieRatings] = list(self.db.movieratings.find())
-
-        for leg in legacy_ratings:
-            self.db.movies.update_one({'title':leg['movie']}, {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': leg['rating']}}, upsert=True)
-            self.db.users.update_one({'_id': leg['user_id']}, {"$addToSet": {"user_ratings": {'title': leg['movie'], 'rating': leg['rating']}}}, upsert=True)
-        await msg.channel.send(str(len(legacy_ratings)) + ' ratings migrated.')
+    #this was used to migrate from the old UserRating table to Movie.movie_rating and User.user_ratings[]
+    #async def migrate_ratings(self, msg):
+    #    legacy_ratings: list[MovieRatings] = list(self.db.movieratings.find())
+    #    for leg in legacy_ratings:
+    #        self.db.movies.update_one({'title':leg['movie']}, {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': leg['rating']}}, upsert=True)
+    #        self.db.users.update_one({'_id': leg['user_id']}, {"$addToSet": {"user_ratings": {'title': leg['movie'], 'rating': leg['rating']}}}, upsert=True)
+    #    await msg.channel.send(str(len(legacy_ratings)) + ' ratings migrated.')

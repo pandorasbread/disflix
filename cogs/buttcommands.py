@@ -160,8 +160,6 @@ class ButtCommands(Cog):
                 await self.ratingCommands.get_movie_ratings(content, msg)
             if command == '$topratings':
                 await self.ratingCommands.get_top_ratings(msg)
-            if command == '$migrateratings':
-                await self.ratingCommands.migrate_ratings(msg)
             if command == '$out':
                 check_user(self.db, msg.author)
                 self.db.users.update_one({"username":msg.author.id}, {"$set": {"out":True}})
