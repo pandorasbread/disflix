@@ -60,19 +60,15 @@ class Rating(BaseAction):
             return
 
         # If already rated before, update the row. If not, add a new row.
-        if self.db.users.count_documents({'user_ratings.title': full_title}) != 0:
+        if self.db.users.count_documents({'_id': user_id, 'user_ratings.title': full_title}) != 0:
             user_rating = next((x['rating'] for x in user['user_ratings'] if x['title'] == full_title), None)
-            self.db.users.update_one({"_id": user_id, "user_ratings.title": full_title},
-                                     {"$set": {"user_ratings.$.rating": rating}})
-            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.sum': rating - user_rating}},
-                                      upsert=True)
+            self.db.users.update_one({"_id": user_id, "user_ratings.title": full_title}, {"$set": {"user_ratings.$.rating": rating}})
+            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.sum': rating - user_rating}}, upsert=True)
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
         else:
-            self.db.users.update_one({'_id': user_id},
-                                     {'$addToSet': {'user_ratings': {'title': full_title, 'rating': rating}}}, upsert=True)
-            self.db.movies.update_one({'title': full_title},
-                                      {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': rating}}, upsert=True)
+            self.db.users.update_one({'_id': user_id}, {'$addToSet': {'user_ratings': {'title': full_title, 'rating': rating}}}, upsert=True)
+            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': rating}}, upsert=True)
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 
