@@ -164,13 +164,13 @@ class ButtCommands(Cog):
             if command == '$deletevotes':
                 await self.delete_owned_votes(msg)
             if command == '$rate':
-                await self.rate_movie2(content, msg)
+                await self.rate_movie(content, msg)
             if command == '$myratings':
-                await self.get_user_ratings2(msg)
+                await self.get_user_ratings(msg)
             if command == '$ratings':
-                await self.get_movie_ratings2(content, msg)
+                await self.get_movie_ratings(content, msg)
             if command == '$topratings':
-                await self.get_top_ratings2(msg)
+                await self.get_top_ratings(msg)
             if command == '$migrateratings':
                 await self.migrate_ratings(msg)
             # if command == '$swap':
@@ -624,7 +624,7 @@ class ButtCommands(Cog):
         else:
             await msg.channel.send('You don\'t exist')
 
-    async def rate_movie2(self, rating_info: str, msg: Message):
+    async def rate_movie(self, rating_info: str, msg: Message):
         # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
         rating, title = rating_info.split(" ", maxsplit=1)
         delete_rating = False
@@ -682,13 +682,13 @@ class ButtCommands(Cog):
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
         else:
-            self.db.users.update_one({"_id": user_id},{"$addToSet": {"user_ratings": {"title": full_title, "rating": rating}}}, upsert=True)
-            self.db.movies.update_one({'title': full_title},{'$inc': {'movie_rating.count': 1, 'movie_rating.sum': rating}}, upsert=True)
+            self.db.users.update_one({'_id': user_id}, {'$addToSet': {'user_ratings': {'title': full_title, 'rating': rating}}}, upsert=True)
+            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': rating}}, upsert=True)
             await msg.add_reaction('🍿')
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 
 
-    async def get_user_ratings2(self, msg: Message):
+    async def get_user_ratings(self, msg: Message):
         # Get the username and their list of movie reviews
         self.check_user(msg.author)
         ratings: list(UserRating) = self.db.users.find_one({"username": msg.author.id}).get('user_ratings')
@@ -700,7 +700,7 @@ class ButtCommands(Cog):
             embed.description += '\n'
         await msg.channel.send(embed=embed)
 
-    async def get_movie_ratings2(self, title: str, msg: Message):
+    async def get_movie_ratings(self, title: str, msg: Message):
         if title == None:
             await msg.channel.send(f'Didja forget a title?')
             return
@@ -732,7 +732,7 @@ class ButtCommands(Cog):
 
         await msg.channel.send(embed=embed)
 
-    async def get_top_ratings2(self, msg: Message):
+    async def get_top_ratings(self, msg: Message):
         MAX_RATINGS = 10  # Current Max number of Top Movie ratings
         # Get the list of every distinct movie title in the `movieratings` table
         movies: list[Movie] = list(self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}}))
