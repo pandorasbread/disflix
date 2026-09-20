@@ -1,21 +1,20 @@
-import datetime
-
 import discord
-import pymongo
-import emojis
-from discord.abc import Messageable
 from discord.ext.commands import Cog
 from discord import Message
 from discord.ext.commands import Bot
+from pymongo import database
 from pymongo.mongo_client import MongoClient
-from dotenv import load_dotenv, find_dotenv
-from cogs.utils import cogutils
-from schema.schema import *
+from dotenv import load_dotenv
+from cogs.actions.MovieManaging import MovieManaging
+from cogs.actions.Polling import Polling
+from cogs.actions.actionhelper import check_user
+from cogs.actions.RoleManaging import RoleManaging
+from cogs.actions.Votebuying import Votebuying
+from cogs.actions.Rating import Rating
+from cogs.utils.inpututils import *
 import os
-import base64
-import re
 import random
-import dateutil.parser as dparser
+
 
 
 # scope creep
@@ -58,14 +57,19 @@ import dateutil.parser as dparser
 #need to track servers for this to work.ordpy.readthedocs.io/en/latest/api.html#discord.Poll
 
 class ButtCommands(Cog):
+    def registerCommands(self, db: database.Database, bot: Bot):
+        self.ratingCommands = Rating(db, bot)
+        self.voteBuyingCommands = Votebuying(db, bot)
+        self.roleCommands = RoleManaging(db, bot)
+        self.pollCommands = Polling(db, bot)
+        self.movieCommands = MovieManaging(db, bot)
+
     def __init__(self, bot: Bot):
         self.bot = bot
         load_dotenv()
-        #self.mongo = MongoClient(os.getenv('MONGO_CONNECTION'))
-        #name = os.getenv('DB_NAME')
         self.mongo = MongoClient(str(os.environ.get('MONGO_CONNECTION')))
-
         self.db = self.mongo[str(os.environ.get('DB_NAME'))]
+        self.registerCommands(self.db, bot)
 
     #OMDB API http://www.omdbapi.com/
 
@@ -80,48 +84,44 @@ class ButtCommands(Cog):
             content = None
             if (len(msg.content.split(' ', 1)) > 1):
                 content = msg.content.split(' ', 1)[1]
-                content = self.sanitize_input(content)
+                content = sanitize_input(content)
 
             if command == '$testing':
                 await msg.channel.send('uwu')
             if command == '$whoami':
                 await self.get_user(content, msg)
             if command == '$add':
-                self.check_user(msg.author)
-                await self.add_movie(content, msg)
+                check_user(self.db, msg.author)
+                await self.movieCommands.add_movie(content, msg)
             if command == '$delete':
-                await self.delete_movie(content, msg)
+                await self.movieCommands.delete_movie(content, msg)
             if command == '$nominate' or command == '$nom': #maybe add custom emoji to movie?
-                self.check_user(msg.author)
-                await self.nominate_movie(content, msg)
+                check_user(self.db, msg.author)
+                await self.movieCommands.nominate_movie(content, msg)
             if command == '$nommy' or command ==  '$nommysorry' or command == '$qn' or command == '$qnom':
-                await self.nominate_db(content, msg, True)
+                await self.movieCommands.nominate_db(content, msg, True)
             if command == '$nomdb':
-                await self.nominate_db(content, msg, False)
+                await self.movieCommands.nominate_db(content, msg, False)
             if command == '$omnomnom':
-                await self.omnomnom(content, msg)
+                await self.movieCommands.omnomnom(content, msg)
             if command == '$nominations' or command == '$noms':
-                await self.get_nominations(msg.channel)
+                await self.movieCommands.get_nominations(msg.channel)
             if command == '$withdraw' or command == '$w':
-                await self.withdraw_movie(content, msg)
-            if command == '$poll' or command == '$vote':
-                await self.run_poll(msg)
-            if command == '$endvote' or command == '$endpoll':
-                await self.end_poll(content == 'roll', msg)
+                await self.movieCommands.withdraw_movie(content, msg)
             if command == '$randomnom':
-                mymovies = self.get_my_movies(msg.author, True)
+                mymovies = self.movieCommands.get_my_movies(msg.author, True)
                 titles = [movie.get('title') for movie in mymovies]
                 if len(titles) == 0:
                     await msg.channel.send('You have no movies left to nominate randomly.')
                     return
                 randmovie = random.choice(titles)
                 await msg.channel.send('Nominating \'' + randmovie + '\'.')
-                await self.nominate_movie(randmovie, msg)
+                await self.movieCommands.nominate_movie(randmovie, msg)
             if command == '$clear':
                 self.db.movies.update_many({"nominated": True}, {'$set': {"nominated": False, 'nominator': None}})
                 await msg.add_reaction('🧻')
             if command == '$mymovies':
-                mymovies = self.get_my_movies(msg.author)
+                mymovies = self.movieCommands.get_my_movies(msg.author)
                 embed = discord.Embed(colour=discord.Colour.dark_red(), title='My Movies', description='')
                 for movie in mymovies:
                     lwd = movie.get('last_win_date')
@@ -131,48 +131,45 @@ class ButtCommands(Cog):
                     embed.description += '\n'
                 await msg.channel.send(embed=embed)
             if command == '$havewewatched' or command == '$watched' or command == '$hww':
-                return await self.have_we_watched(content, msg)
+                return await self.movieCommands.have_we_watched(content, msg)
             if command == '$find' or command == '$search' or command == '$f' or command == '$s':
-                return await self.find_movies(content, msg)
-
+                return await self.movieCommands.find_movies(content, msg)
             if command == '$hist' or command == '$ha' or command == '$ah' or command == '$addhistory' or command == '$addh': #like $ha 04/20/2020 rise of skywalker
-                await self.historical_add(content, msg)
+                await self.movieCommands.historical_add(content, msg)
+            if command == '$wins':
+                await self.movieCommands.score(msg)
+            if command == '$poll' or command == '$vote':
+                await self.pollCommands.run_poll(msg)
+            if command == '$endvote' or command == '$endpoll':
+                await self.pollCommands.end_poll(content == 'roll', msg)
+            if command == '$movierole':
+                await self.roleCommands.addrole(content, msg, 'movie_watcher')
+            if command == '$buyvote':
+                await self.voteBuyingCommands.add_user_vote(content, msg)
+            if command == '$usevote':
+                await self.voteBuyingCommands.use_user_vote(content, msg)
+            if command == '$checkvotes':
+                await self.voteBuyingCommands.get_owned_votes(msg)
+            if command == '$deletevotes':
+                await self.voteBuyingCommands.delete_owned_votes(msg)
+            if command == '$rate':
+                await self.ratingCommands.rate_movie(content, msg)
+            if command == '$myratings':
+                await self.ratingCommands.get_user_ratings(msg)
+            if command == '$ratings':
+                await self.ratingCommands.get_movie_ratings(content, msg)
+            if command == '$topratings':
+                await self.ratingCommands.get_top_ratings(msg)
+            if command == '$migrateratings':
+                await self.ratingCommands.migrate_ratings(msg)
             if command == '$out':
-                self.check_user(msg.author)
+                check_user(self.db, msg.author)
                 self.db.users.update_one({"username":msg.author.id}, {"$set": {"out":True}})
                 await msg.add_reaction('🏃')
             if command == '$in':
-                self.check_user(msg.author)
+                check_user(self.db, msg.author)
                 self.db.users.update_one({"username":msg.author.id}, {"$set": {"out":False}})
                 await msg.add_reaction('👁')
-            if command == '$movierole':
-                await self.addrole(content, msg, 'movie_watcher')
-            if command == '$wins':
-                await self.score(msg)
-            if command == '$buyvote':
-                await self.add_user_vote(content, msg)
-            if command == '$usevote':
-                await self.use_user_vote(content, msg)
-            if command == '$checkvotes':
-                votes = await self.get_owned_votes(msg)
-                embed = discord.Embed(colour=discord.Colour.orange(), title='My Bribed Votes', description='')
-                for vote in votes:
-                    chump_user = await self.bot.fetch_user(vote.get('chump'))
-                    embed.description += str(chump_user.display_name) + ' - ' + str(vote.get('numberVotes'))
-                    embed.description += '\n'
-                await msg.channel.send(embed=embed)
-            if command == '$deletevotes':
-                await self.delete_owned_votes(msg)
-            if command == '$rate':
-                await self.rate_movie(content, msg)
-            if command == '$myratings':
-                await self.get_user_ratings(msg)
-            if command == '$ratings':
-                await self.get_movie_ratings(content, msg)
-            if command == '$topratings':
-                await self.get_top_ratings(msg)
-            if command == '$migrateratings':
-                await self.migrate_ratings(msg)
             # if command == '$swap':
             #if command == '$roll':
             #if command == '$rollall':
@@ -182,439 +179,8 @@ class ButtCommands(Cog):
             print(e)
             await msg.channel.send('ERROR: '+str(e))
 
-    def sanitize_input(self, msg: str):
-        new_msg = re.sub(r'[’`‵ʼ‘]', '\'', msg) #fix singlequote characters
-        new_msg = re.sub(r'[“”＂❝❞]', '"', new_msg) #fix double quote characters
-        new_msg = re.sub(r'[   ]', ' ', new_msg) #replace ENSP, EMSP, and non-breaking space
-        new_msg = re.sub(r'…', '...', new_msg) #fix ellipses
-        return new_msg
-
-
-    def extract_emoji(self, content: str):
-
-        #get using library
-        emoji = emojis.get(content)
-
-        #get using regex
-        if (emoji is None):
-            emoji = re.match(r'<.*:\w*:\d*>', content)
-        if (emoji is None):
-            return ''
-        return emoji
-
-
-    async def addrole(self, content: str, msg: Message, rolename: str):
-        server = msg.guild
-
-        if content.strip('<>&@').isdecimal():
-            role_id = int(content.strip('<>&@'))
-        else:
-            roles = await server.fetch_roles()
-            while len(roles) > 0:
-                r = roles.pop()
-                if r.name == content:
-                    role_id = r.id
-                    break
-        if (role_id is None):
-            return await msg.channel.send('ERROR: invalid role '+content)
-
-        result = ""
-
-        role = self.db.roles.find_one({"server_id": msg.guild.id, "role": rolename})
-        if role is None:
-            self.db.roles.insert_one({"server_id": msg.guild.id, "role": rolename, "role_id": role_id})
-        else:
-            self.db.roles.update_one({"server_id": msg.guild.id, "role": rolename}, {"$set": {"role_id": role_id}})
-            return await msg.channel.send(rolename + " changed from " + server.get_role(role.get("role_id")).name + " to " + server.get_role(role_id).name + '. ')
-
-        return await msg.channel.send(rolename + " is now assigned to " + server.get_role(role_id).name + '.')
-
-    async def withdraw_movie(self, content: str, msg: Message):
-        self.check_user(msg.author)
-        if not content:
-            self.db.movies.update_many(
-                {"nominated": True, "nominator": self.db.users.find_one({"username": msg.author.id}).get('_id')},
-                {"$set": {"nominated": False, "nominator": None}})
-        else:
-            nommedmovie = self.db.movies.find_one({"title": self.clean_case(content), "nominated": True})
-            if nommedmovie is None:
-                return await msg.channel.send('Are you sure that ' + content + ' is nominated?')
-            nominator = self.db.users.find_one({'_id': nommedmovie.get('nominator')})
-            if nominator.get('username') != msg.author.id:
-                nominatoruser = await self.bot.fetch_user(nominator.get('username'))
-                return await msg.channel.send(content + ' must be removed by the nominator, ' + nominatoruser.display_name + '.')
-            self.db.movies.update_one(
-                {"title": self.clean_case(content), "nominated": True}, {"$set": {"nominated": False, "nominator": None}})
-        await msg.add_reaction('🧻')
-
-    async def have_we_watched(self, searchtext: str, msg: Message):
-        watched = []
-        if (searchtext is None):
-            watched = self.db.movies.find({'last_win_date': {'$exists': True }})
-        else:
-            movie = self.db.movies.find_one({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
-            if movie is not None:
-                watched = self.db.movies.find({'title': self.clean_case(searchtext), 'last_win_date':{'$exists': True}})
-            else:
-                result = '`' + searchtext + '` has not been watched.'
-                messyfind = self.db.movies.find_one({'title': self.clean_search(searchtext), 'last_win_date':{'$exists': True}})
-                if messyfind is None:
-                    return await msg.channel.send(result)
-                result += ' Maybe one of these is what you are looking for?'
-                await msg.channel.send(result)
-                watched = self.db.movies.find({'title': self.clean_search(searchtext), 'last_win_date': {'$exists': True}})
-
-        watched = watched.sort('last_win_date', pymongo.ASCENDING)
-
-        def description_builder(watch):
-            lwd = watch.get('last_win_date')
-            return watch.get('title') + ' - ' + str(lwd.date()) + '\n'
-
-        for embed in cogutils.get_safe_embeds(watched, description_builder, 'Watched Movies', discord.Colour.dark_gold()):
-            await msg.channel.send(embed=embed)
-
-    async def score(self, msg: Message):
-        films = list(self.db.movies.find({"last_win_date": {'$exists': True}}))
-        users = list(self.db.users.find())
-        scores = dict()
-        for film in films:
-            nom = film.get("originator")
-            for user in users:
-                if user.get("_id") == nom and nom is not None:
-                    if user.get('username') not in scores:
-                        scores[user.get('username')] = 1
-                        break
-                    else:
-                        scores[user.get('username')] = scores[user.get('username')]+1
-                        break
-
-        def score_builder(userToTotal):
-            return userToTotal[0] + ' - ' + str(userToTotal[1]) + '\n'
-
-        orderedscores = list(map(list, sorted(scores.items(), key=lambda item: item[1], reverse=True)))
-
-        for score in orderedscores:
-            usr = await self.bot.fetch_user(score[0])
-            score[0] = usr.display_name
-
-        for embed in cogutils.get_safe_embeds(orderedscores, score_builder, 'Movie Night Wins',
-                                              discord.Colour.dark_gold()):
-            await msg.channel.send(embed=embed)
-
-
-
-
-
-    async def find_movies(self, searchtext: str, msg: Message):
-        if searchtext is None:
-            return await msg.channel.send('You forgot to enter something to search for, I think.')
-
-        films = self.db.movies.find({'title': self.clean_search(searchtext)}).sort('title', pymongo.ASCENDING)
-        def description_builder(movie):
-            lwd = movie.get('last_win_date')
-            desc = movie.get('title')
-            if lwd is not None:
-                desc += ' - ' + str(lwd.date())
-            desc += '\n'
-            return desc
-
-        for embed in cogutils.get_safe_embeds(films, description_builder, 'Found Movies:', discord.Colour.dark_gold()):
-            await msg.channel.send(embed=embed)
-
-
-
-    async def historical_add(self, dateAndMovie: str, msg: Message):
-        histdate = dparser.parse(dateAndMovie.split(' ', 1)[0], fuzzy=True)
-        if (len(dateAndMovie.split(' ', 1)) > 1):
-            title = dateAndMovie.split(' ', 1)[1]
-        else:
-            return await msg.channel.send('You forgot to enter a movie, I think.')
-
-        self.check_user(msg.author)
-        isNew = await self.add_plain(title, msg, True)
-        lastwindate = self.db.movies.find_one({'title': self.clean_case(title)}).get('last_win_date')
-        if lastwindate is not None and lastwindate > histdate:
-            return await msg.channel.send(title + ' last won on ' + str(lastwindate.date()) + ', which is more recent than ' + str(histdate.date()) + '.')
-
-        self.db.movies.update_one({'title': self.clean_case(title)}, {'$set': {'last_win_date': histdate}})
-        return await msg.add_reaction('📅')
-
-
-
-    def get_my_movies(self, user: Message.author, only_free: bool = False):
-        self.check_user(user)
-        user_id = self.db.users.find_one({"username": user.id}).get('_id')
-        if only_free:
-            return self.db.movies.find({'originator': user_id, 'nominated': False, "last_win_date": {'$exists': False}})
-        return self.db.movies.find({'originator': user_id})
-
-    def tag_role(self, rolename: str, server: discord.Guild):
-        role = self.db['roles'].find_one({'server_id': server.id, 'role': rolename})
-        if role is None:
-            return ""
-        return server.get_role(role.get('role_id')).mention + "\r\n"
-
-    async def run_poll(self, msg: Message, tiebreaker: bool = False):
-        activepoll = self.db['polls'].find_one({'open': True})
-        if activepoll is not None:
-            try:
-                pollmsg = ''
-                if msg.channel.id != activepoll.get('channel_id'):
-                    pollmsg += 'Poll is in a different channel. '
-                    channel = msg.guild.get_channel_or_thread(activepoll.get('channel_id'))
-                else:
-                    channel = msg.channel
-                activepollmessage = await channel.fetch_message(activepoll.get('message_id'))
-                return await msg.channel.send(pollmsg + 'Current poll here: ' + activepollmessage.jump_url)
-
-            except:
-                await msg.channel.send('I could not find the poll at all so I will re-run the poll. Find a scapegoat to blame for deleting it or running it in a channel I cannot see.')
-                self.db['polls'].update_one({'message_id': activepoll.get('message_id')}, {'$set': {'open': False}})
-
-
-        movies = self.db.movies.find({"nominated": True})
-        movies = self.movies_with_in_nominators(movies)
-        titles = [movie['title'] for movie in self.movies_with_in_nominators(movies)]
-        duration = datetime.timedelta(hours=24)
-        if len(titles) == 0:
-            embed = discord.Embed(colour=discord.Colour.yellow(), title='', description='')
-            embed.description = 'No active nominations!'
-            return await msg.channel.send(embed=embed)
-        numvotes = '0'
-        if len(titles) <= 4:
-            numvotes = '1'
-        elif len(titles) > 4 and len(titles) <= 7:
-            numvotes = '2'
-        else:
-            numvotes = '3'
-
-        poll_code = base64.urlsafe_b64encode(os.urandom(6)).decode('ascii')
-        result = discord.Poll(question= 'TIEBREAKER! [Poll Code: `'+ poll_code + '`]' if tiebreaker else 'Which movie? ' + numvotes + ' vote(s) [Poll Code: `' + poll_code + '`]', multiple=len(titles) > 4 and not tiebreaker,
-                              duration=duration)
-        for title in titles:
-            result.add_answer(text=title)
-        await msg.channel.send(self.tag_role('movie_watcher', msg.guild))
-        sent_poll = await msg.channel.send(poll=result)
-
-        self.db['polls'].insert_one({'server_id': msg.guild.id, 'message_id': sent_poll.id, 'channel_id':sent_poll.channel.id, 'poll_time': datetime.datetime.now(tz=datetime.timezone.utc), 'poll_code':poll_code, 'open':True})
-
-    async def end_poll(self, roll: bool, msg: Message):
-        poll = self.db['polls'].find_one({'server_id': msg.guild.id, 'poll_time': {"$lt": datetime.datetime.now(tz=datetime.timezone.utc)}, 'open': True})
-        channel = await self.bot.fetch_channel(poll.get('channel_id'))
-        pollmessage = await channel.fetch_message(poll.get('message_id'))
-        sortedlist = sorted(pollmessage.poll.answers, key=lambda a: a.vote_count, reverse=True)
-        winners = [answer for answer in sortedlist if answer.vote_count == sortedlist[0].vote_count]
-        if len(winners) == 1:
-            await msg.channel.send(self.tag_role('movie_watcher', msg.guild) + winners[0].text + ' is the winner!')
-            self.db['movies'].update_one({'title': self.clean_case(winners[0].text)}, {'$set': {'last_win_date': datetime.datetime.today()}})
-            nominators_out = [user['_id'] for user in self.db.users.find({"out": False})]
-            self.db['movies'].update_many({'nominated': True, 'nominator': {'$in': nominators_out}}, {'$set': {'nominated': False, 'nominator': None}})
-            self.db['polls'].update_one({'message_id': poll.get('message_id')}, {'$set': {'open':False}})
-            self.db['users'].update_many({}, {'$set': {'out':False}})
-            await pollmessage.poll.end()
-        else:
-            for answer in sortedlist:
-                if answer.vote_count != sortedlist[0].vote_count:
-                    self.db['movies'].update_one({'title': answer.text, 'nominated': True}, {'$set': {'nominated': False, 'nominator': None}})
-            self.db['polls'].update_one({'message_id': poll.get('message_id')}, {'$set': {'open': False}})
-            await pollmessage.poll.end()
-            await self.run_poll(msg, True)
-
-    async def get_nominations(self, channel: Messageable):
-        nominated_movies = self.db.movies.find({"nominated": True})
-        movies = self.movies_with_in_nominators(nominated_movies)
-        titles = [[movie['title'], movie.get('last_win_date')] for movie in movies]
-        msg = discord.Embed(colour=discord.Colour.yellow(), title='Current Nominations', description='')
-        if len(titles) == 0:
-            msg.description = 'No active nominations!'
-        for title in titles:
-            msg.description += title[0]
-            if title[1] is not None:
-                msg.description += ' - ' + str(title[1].date())
-            msg.description += '\n'
-            #msg.add_field(value= title)
-        await channel.send(embed=msg)
-
-    def movies_with_in_nominators(self, nominated_movies):
-        nominators_out = [user['_id'] for user in self.db.users.find({"out": True})]
-        movies = []
-        for movie in nominated_movies:
-            if movie.get("nominator") not in nominators_out:
-                movies.append(movie)
-        return movies
-
-    async def nominate_movie(self, title: str, msg: Message):
-        isNew = await self.add_plain(title, msg)
-        isNominated = self.db.movies.count_documents({'title': self.clean_case(title), 'nominated': True}) != 0
-        if not isNew and isNominated:
-            nominatorid = self.db.movies.find_one({'title': self.clean_case(title)}).get('nominator')
-            nominator = self.db.users.find_one({'_id': nominatorid}).get('username')
-            user = await self.bot.fetch_user(nominator)
-            await msg.channel.send(title + ' already nominated by ' + user.display_name)
-        else:
-            self.check_user(msg.author)
-            self.db.movies.update_one({"title": self.clean_case(title)}, {"$set": {"nominated": True, "nominator": self.db.users.find_one({"username": msg.author.id}).get('_id')}})
-            last_win = self.db['movies'].find_one({'title': self.clean_case(title)}).get('last_win_date')
-            if last_win is not None:
-                await msg.channel.send(title + ' won on ' + str(last_win.date()))
-            await msg.add_reaction('🗳️')
-
-
-    async def nominate_db(self, title: str, msg: Message, user_nominated: bool = False):
-        self.check_user(msg.author)
-        if title is None:
-            return await msg.channel.send('You forgot to enter something to nominate, I think.')
-
-        if user_nominated:
-            user_id = self.db.users.find_one({"username": msg.author.id}).get('_id')
-            films = self.db.movies.find({'title': self.clean_search(title), 'nominated': False, 'originator': user_id}).sort('title', pymongo.ASCENDING)
-        else:
-            films = self.db.movies.find({'title': self.clean_search(title), 'nominated': False}).sort('title', pymongo.ASCENDING)
-        film = None
-
-        for f in films:
-            if 'last_win_date' not in f:
-                film = f
-                break
-
-        if film is None:
-            return await msg.channel.send(
-                'You have not entered a movie with a title like `' + title + '` or it is already nominated this week. Quick nom is meant as a way to reference your own nominations easily.')
-
-        await self.nominate_movie(film['title'], msg)
-        return await msg.channel.send('Nominated `' + film['title'] + '`.')
-
-    async def omnomnom(self, title: str, msg: Message):
-        self.check_user(msg.author)
-        if title is None:
-            return await msg.channel.send('You forgot to enter something to steal, I think.')
-
-        user_id = self.db.users.find_one({"username": msg.author.id}).get('_id')
-        films = self.db.movies.find({'title': self.clean_search(title), '$or':[{'nominated': False}, {'nominated': {'$exists':False}}]}).sort('title',
-                                                                                                     pymongo.ASCENDING)
-        film = None
-        for f in films:
-            if 'last_win_date' not in f:
-                film = f
-                break
-
-        if film is None:
-            return await msg.channel.send(
-                'No one entered a movie with a title like `' + title + '`, or it is already nominated, or it has already won.')
-
-        if film['originator'] == user_id:
-            return await msg.channel.send('`'+film['title']+'` is your own movie, stealing it is legal and thus I will not assist you.')
-
-
-        old_user = await self.bot.fetch_user(self.db.users.find_one({"_id": film['originator']}).get('username'))
-        await msg.channel.send('⛵😏'+ msg.author.name + '🏴‍☠️' + film['title'] + '🏴‍☠️  🌊🏝️🥺' + old_user.display_name)
-
-        self.db.movies.update_one({'title': self.clean_case(film['title'])}, {'$set': {'originator': user_id}})
-        return await self.nominate_movie(film['title'], msg)
-
-
-
-    def check_user(self, user: Message.author):
-        if self.db.users.count_documents({"username": user.id}) == 0:
-            self.db.users.insert_one({"username": user.id, "out": False})
-
-    async def add_movie(self, title: str, msg: Message):
-        isNew = await self.add_plain(title, msg)
-        if not isNew:
-            originatorid = self.db.movies.find_one({'title': self.clean_case(title)}).get('originator')
-            originator = self.db.users.find_one({'_id': originatorid}).get('username')
-            user = await self.bot.fetch_user(originator)
-            await msg.channel.send(title + ' already added by ' + user.display_name)
-
-    async def add_plain(self, title: str, msg: Message, frombot: bool = False) -> bool:
-        if len(title) > 55:
-            raise Exception('Movie names cannot be over 55 characters long.')
-        isNew = self.db.movies.count_documents({'title': self.clean_case(title)}) == 0
-        if isNew:
-            originator = self.bot.application_id if frombot else msg.author.id
-            self.db.movies.insert_one({"title": title, "originator": self.db.users.find_one({'username': originator}).get('_id'), 'nominated': False})
-            await msg.add_reaction('👍')
-        return isNew
-
     def add_omdb(self, title: str, msg: Message):
         return
-
-    async def delete_movie(self, title: str, msg: Message):
-        if self.db.movies.count_documents({"title": self.clean_case(title), "originator":self.db.users.find_one({'username': msg.author.id}).get('_id')}) != 0:
-            self.db.movies.delete_one({"title": self.clean_case(title), "originator":self.db.users.find_one({'username': msg.author.id}).get('_id')})
-            await msg.add_reaction('🗑')
-        else:
-            await msg.channel.send('Movies can only be removed by the user who added them or the movie has already been deleted.')
-
-    def clean_case(self, text: str):
-        return re.compile("^"+re.escape(text)+"$", re.IGNORECASE)
-
-    def clean_search(self, text: str):
-        return re.compile(".*" + re.escape(text) + ".*", re.IGNORECASE)
-    
-    async def add_user_vote(self, voter: str, msg: Message):
-        self.check_user(msg.author)
-        # Strip the Voter id from the Tagged user
-        voter_id_int = int(voter.strip("<@!>"))
-        # Get User information
-        voter_user = await self.bot.fetch_user(voter_id_int)
-        buyer_user = await self.bot.fetch_user(msg.author.id)
-        if self.db.votebuys.count_documents({'voter': voter_user.id, 'chump': buyer_user.id}) != 0:
-             # If data of the Voter and Chump already exist, update the `numberVotes` by 1
-            bribe_info = self.db.votebuys.find_one_and_update({'voter': voter_user.id, 'chump': buyer_user.id},{"$inc": {"numberVotes": 1}}).get("numberVotes")
-            await msg.channel.send(voter_user.display_name + ' has has a vote bought again by ' + buyer_user.display_name + ' and now has ' + str(bribe_info + 1) + ' votes bought.'
-                                   + voter_user.display_name + ', please vote for the bought vote movie or face the wrath of the BUTTDFV.') # You don't want this!!
-        else:
-            # If data of the Voter and Chump doesnt exist, start a new count
-            self.db.votebuys.insert_one({'voter': voter_user.id, 'chump': buyer_user.id, "numberVotes": 1})
-            await msg.channel.send(voter_user.display_name + ' has had a vote bought by ' + buyer_user.display_name)
-       
-    async def use_user_vote(self, chump: str, msg: Message):
-        self.check_user(msg.author)
-        # Strip the Chump id from the Tagged user
-        chump_id_int = int(chump.strip("<@!>"))
-        # Get User information
-        chump_user = await self.bot.fetch_user(chump_id_int)
-        voter_user = await self.bot.fetch_user(msg.author.id)
-        # Check to see if the Voter and Chump relationship exists and if there is at least one vote
-        if self.db.votebuys.count_documents({'voter': voter_user.id, 'chump': chump_user.id}) != 0 and self.db.votebuys.find_one({'voter': voter_user.id, 'chump': chump_user.id}).get('numberVotes') > 0:
-            # If data of the Voter and Chump exists, decrease the `numberVotes` by 1
-            bribe_info = self.db.votebuys.find_one_and_update({'voter': voter_user.id, 'chump': chump_user.id},{"$inc": {"numberVotes": -1}}).get("numberVotes")
-            await msg.channel.send(voter_user.display_name + ' has used a bribed vote from ' + chump_user.display_name + '.  ' 
-                                   + chump_user.display_name + ' must now vote for the movie that ' + voter_user.display_name + ' says or they will face the wrath of the BUTTDVF') # You don't want this!!
-            if (bribe_info - 1) > 0:
-                # If the voter still has votes from this chump, let them know
-                await msg.channel.send(voter_user.display_name + ' still has ' + str(bribe_info - 1) + ' votes from ' + chump_user.display_name)
-        else:
-            # Either doesnt exist or the count is 0
-            await msg.channel.send("You have no votes bought by this user.")
-
-    async def get_owned_votes(self, msg: Message):
-        self.check_user(msg.author)
-        voter_user = await self.bot.fetch_user(msg.author.id)
-        return self.db.votebuys.find({'voter': voter_user.id})
-    
-    async def delete_owned_votes(self, msg: Message):
-        def check(message: Message):
-            # Check if the message is from the same author and in the same channel
-            return message.author == msg.author and message.channel == msg.channel
-
-        self.check_user(msg.author)
-        # Since we delete all the voter values, check to make sure they really want to do this
-        await msg.channel.send("Are you sure you want to delete all your saved votes? Reply YES to Delete")
-        try:
-            reply: Message = await self.bot.wait_for('message', check=check, timeout=60.0)
-            if reply.content == 'YES':
-                voter_user = await self.bot.fetch_user(msg.author.id)
-                self.db.votebuys.delete_many({'voter': voter_user.id})
-                await msg.add_reaction('🗑')
-                await msg.channel.send("All saved votes have been deleted")
-            else: 
-                # Any value other than YES goes here
-                await msg.channel.send("Votes not Deleted")
-        except TimeoutError:
-            # Message if Timeout happens
-            await msg.channel.send("Answer not recieved. Not deleting votes.")
     
     async def get_user(self, user: str, msg: Message):
         user_id_int = int(user.strip("<@!>"))
@@ -624,132 +190,5 @@ class ButtCommands(Cog):
         else:
             await msg.channel.send('You don\'t exist')
 
-    async def rate_movie(self, rating_info: str, msg: Message):
-        # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
-        rating, title = rating_info.split(" ", maxsplit=1)
-        delete_rating = False
-
-        # If rating is a 'x', set the rating to be deleted
-        if rating == 'x':
-            delete_rating = True
-            rating: float = 0.0
-        else:
-            try:
-                rating: float = round(float(rating), 2)
-                # Check to see if rating is between 0 and 10.0
-                if not 0 <= rating <= 10.0:
-                    await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10.')
-                    return
-            except ValueError:
-                # If the value i
-                await msg.channel.send(f'Hey, you gotta put the rating then the movie name first bub. Ex `$rate 10 Your Mom`')
-                return
-
-        # Get the User of the command
-        self.check_user(msg.author)
-        user: User = self.db.users.find_one({"username": msg.author.id})#.get('_id')
-        user_id = user['_id']
-
-        # Use the Title saves in the Movies table
-        full_title = self.db.movies.find_one({'title': self.clean_search(title)}).get('title')
-
-        if delete_rating:
-            user_rating = next((x['rating'] for x in user['user_ratings'] if x['title']==full_title), None)
-
-            self.db.users.update_one({"_id": user_id}, {"$pull": {"user_ratings": {"title": full_title}}})
-            self.db.movies.update_one({"title": full_title}, {"$inc": {"movie_rating.sum": -user_rating, "movie_rating.count": -1}})
-            return await msg.channel.send(f'{full_title}\'s rating has been deleted')
-
-
-        # Shouldn't ever hit here, but if title and rating are none, send a message back
-        if title is None and rating is None:
-            await msg.channel.send('You didn\'t even put a movie or a rating...')
-
-        # Check if movie exists. If not, send back a message
-        if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
-            return await msg.channel.send(f'Movie {title} does not exist.')
-
-        movie = self.db.movies.find_one({'title': self.clean_search(title), 'last_win_date':{'$exists': True}})
-        if movie is None:
-            await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
-            return
-
-        # If already rated before, update the row. If not, add a new row.
-        if self.db.users.count_documents({'user_ratings.title': full_title}) != 0:
-            user_rating = next((x['rating'] for x in user['user_ratings'] if x['title']==full_title), None)
-            self.db.users.update_one({"_id": user_id, "user_ratings.title": full_title}, {"$set": {"user_ratings.$.rating": rating}})
-            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.sum': rating - user_rating}}, upsert=True)
-            await msg.add_reaction('🍿')
-            await msg.channel.send(f'You have updated your rating of {full_title} to {str(rating)}')
-        else:
-            self.db.users.update_one({'_id': user_id}, {'$addToSet': {'user_ratings': {'title': full_title, 'rating': rating}}}, upsert=True)
-            self.db.movies.update_one({'title': full_title}, {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': rating}}, upsert=True)
-            await msg.add_reaction('🍿')
-            await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
-
-
-    async def get_user_ratings(self, msg: Message):
-        # Get the username and their list of movie reviews
-        self.check_user(msg.author)
-        ratings: list(UserRating) = self.db.users.find_one({"username": msg.author.id}).get('user_ratings')
-        ratings.sort(key=lambda x: x['title'])
-        # Output each movie and its rating into new lines
-        embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings', description='')
-        for rating in ratings:
-            embed.description += rating['title'] + " - " + str(rating['rating'])
-            embed.description += '\n'
-        await msg.channel.send(embed=embed)
-
-    async def get_movie_ratings(self, title: str, msg: Message):
-        if title == None:
-            await msg.channel.send(f'Didja forget a title?')
-            return
-
-        # Check if movie exists. If not, send back a message
-        if self.db.movies.count_documents({'title': self.clean_search(title)}) == 0:
-            await msg.channel.send(f'Movie {title} does not exist.')
-            return
-
-        # Get Ratings in Desending (Highest Rating Value) order
-        movie: Movie = self.db.movies.find_one({'title': self.clean_search(title)})
-
-        embed = discord.Embed(colour=discord.Colour.orange(), title=f'Ratings for {movie["title"]}', description='')
-
-        users_that_rated: list[User] = list(self.db.users.find({"user_ratings.title": movie['title']}))
-        if len(users_that_rated) == 0:
-            return await msg.channel.send(f'Movie has not been rated.')
-        # For each rating, get the username of the member who rated it and their rating per line.
-        for rating in users_that_rated:
-            username = rating['username']
-            user = await self.bot.fetch_user(username)
-            embed.description += user.name + ' - ' + str(next((x['rating'] for x in rating['user_ratings'] if x['title'] == movie['title']), 'N/A'))
-            embed.description += '\n'
-
-        # Calculate the average
-        average: float = movie['movie_rating']['sum'] / movie['movie_rating']['count']
-        embed.description += '\n'
-        embed.description += f'**Average Rating:**  {str(round(average, 2))}'
-
-        await msg.channel.send(embed=embed)
-
-    async def get_top_ratings(self, msg: Message):
-        MAX_RATINGS = 10  # Current Max number of Top Movie ratings
-        # Get the list of every distinct movie title in the `movieratings` table
-        movies: list[Movie] = list(self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}}))
-        movies.sort(key=lambda x: round(x['movie_rating']['sum'] / x['movie_rating']['count'], 2), reverse=True)
-        def description_builder(mov):
-            average: float = round(mov['movie_rating']['sum'] / mov['movie_rating']['count'], 2)
-            return f'## **{mov["title"]}** - **{str(average)}**\n'
-
-        for embed in cogutils.get_safe_embeds(movies[:MAX_RATINGS], description_builder, 'Top Movie Reviews', discord.Colour.yellow()):
-            await msg.channel.send(embed=embed)
-
-    async def migrate_ratings(self, msg):
-        legacy_ratings: list[MovieRatings] = list(self.db.movieratings.find())
-
-        for leg in legacy_ratings:
-            self.db.movies.update_one({'title':leg['movie']}, {'$inc': {'movie_rating.count': 1, 'movie_rating.sum': leg['rating']}}, upsert=True)
-            self.db.users.update_one({'_id': leg['user_id']}, {"$addToSet": {"user_ratings": {'title': leg['movie'], 'rating': leg['rating']}}}, upsert=True)
-        await msg.channel.send(str(len(legacy_ratings)) + ' ratings migrated.')
 async def setup(bot):
     await bot.add_cog(ButtCommands(bot))
