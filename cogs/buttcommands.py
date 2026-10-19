@@ -155,7 +155,7 @@ class ButtCommands(Cog):
             if command == '$rate':
                 await self.ratingCommands.rate_movie(content, msg)
             if command == '$myratings':
-                await self.ratingCommands.get_user_ratings(msg)
+                await self.ratingCommands.get_user_ratings(content, msg)
             if command == '$ratings':
                 await self.ratingCommands.get_movie_ratings(content, msg)
             if command == '$topratings':
