@@ -46,7 +46,7 @@ async def help(context):
     embed.description += '\n'
     embed.description += '## MOVIE RATING COMMANDS:\n'
     embed.description += '`$rate` `rating` `movie_name`: Records your rating (0-10) for a movie watched during movie night. Ex. `$rate 10 Star Wars: The Rise of Skywalker`\n'
-    embed.description += '`$myratings`: Gets the list of all of Your ratings for movies. Add the "n" flag after to search by Rating. Ex "$myratings n"\n'
+    embed.description += '`$myratings`: Gets the list of all of Your ratings for movies. Add the "n" flag after to get list by Rating. Ex "$myratings n"\n'
     embed.description += '`$ratings` `movie_name`: Gets all and the average score for the provided movie name. Ex. `$ratings Jurassic Park`.\n'
     embed.description += '`$topratings`: Gives the Top 10 Movies scored by BUTTs based on Average review scores.\n'
     embed.description += '\n'
