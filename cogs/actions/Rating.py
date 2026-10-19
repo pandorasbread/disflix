@@ -73,11 +73,15 @@ class Rating(BaseAction):
             await msg.channel.send(f'You have rated {full_title} a score of {str(rating)}')
 
 
-    async def get_user_ratings(self, msg: Message):
+    async def get_user_ratings(self, flag: str, msg: Message):
         # Get the username and their list of movie reviews
         check_user(self.db, msg.author)
         ratings: list[UserRating] = list(self.db.users.find_one({"username": msg.author.id}).get('user_ratings'))
-        ratings.sort(key=lambda x: x['title'])
+        # If user gives the n flag after the command, sort by rating. Else, default to title
+        if flag == 'n':
+            ratings.sort(key=lambda x: x['rating'], reverse=True)
+        else:
+            ratings.sort(key=lambda x: x['title'])
         # Output each movie and its rating into new lines
         embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings', description='')
         for rating in ratings:
