@@ -80,10 +80,10 @@ class Rating(BaseAction):
         # If user gives the n flag after the command, sort by rating. Else, default to title
         if flag == 'n':
             ratings.sort(key=lambda x: x['rating'], reverse=True)
+            embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings - Sorted by Rating', description='')
         else:
             ratings.sort(key=lambda x: x['title'])
-        # Output each movie and its rating into new lines
-        embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings', description='')
+            embed = discord.Embed(colour=discord.Colour.orange(), title='My Movie Ratings - Sorted Alphabetically', description='')
         for rating in ratings:
             embed.description += rating['title'] + " - " + str(rating['rating'])
             embed.description += '\n'
