@@ -46,4 +46,13 @@ class VoteBuy(TypedDict):
     chump: int
     numberVotes: int
 
+class Timeouts(TypedDict):
+    _id: ObjectId
+    server_id: int
+    username: int
+    durationMinutes: float
+    reason: str
+    spared: bool
+    timestamp: datetime
+
 

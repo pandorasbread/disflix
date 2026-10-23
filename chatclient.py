@@ -55,6 +55,12 @@ async def help(context):
     embed.description += '`$ass` `ACRONYM` `\"Acronym Expansion\"`: add an expansion of an acronym.\n'
     embed.description += '`$asses` or `$as` or `$acrs` or `$acronyms` or `eatass`: get the expansions of all acronyms.\n'
     embed.description += '`$bidet` `ACRONYM` or `$bidet` `ACRONYM` `"definition"`: admin only command to delete acronyms or definitions.\n'
+    embed.description += '# MODERATION COMMANDS:\n'
+    embed.description += '`$timeout` `@username` `minutes as number (optional)` `reason (optional)`: times out a user for the specified number of minutes, with the reason provided. To provide a non-default reason, you MUST provide a timeout number. The default timeout is 1 minute.\n'
+    embed.description += 'also aliases as `$to`, `$ko`, `$tyrant`. \n'
+    embed.description += '`$untimeout` `@username` `reason (optional)`: untimeouts a user with the reason provided.\n'
+    embed.description += 'also aliases as `$uto`, `$uko`, `$save`. \n'
+
     await context.send(embed=embed)
 
 
