@@ -4,6 +4,7 @@ from discord.ext.commands import Bot
 from discord.ext import commands
 from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
+from datetime import timedelta
 import os
 import aiohttp
 import io
@@ -15,6 +16,48 @@ class MiscCommands(Cog):
         load_dotenv()
         self.mongo = MongoClient(str(os.environ.get('MONGO_CONNECTION')))
         self.db = self.mongo[str(os.environ.get('DB_NAME'))]
+
+    @commands.command(name='untimeout', aliases=['uto', 'uko', 'save'])
+    async def untimeout(self, context: commands.Context, user: discord.Member, *, reason: str = ''):
+        try:
+            ismod = False
+            for role in context.message.author.roles:
+                if role.name == 'Mini Moderator':
+                    ismod = True
+            if not (context.message.author.guild_permissions.administrator or ismod):
+                return await context.channel.send('Oh, you believe in freeing your fellow revolutionaries? cringe')
+
+            self.db.timeouts.find_one_and_update(
+                {"user": user.id},
+                {"$set": {"spared": True, "sparedReason":reason}},
+                sort=[("timestamp", -1)],
+            )
+
+            await context.message.add_reaction('😇')
+            await context.send(user.mention + ' has proven to be a little angel')
+            return await user.timeout(None, reason=reason)
+
+        except Exception as e:
+            print(e)
+            await context.channel.send('ERROR: ' + str(e))
+
+    @commands.command(name='timeout', aliases=['to', 'ko', 'tyrant'])
+    async def timeout(self, context: commands.Context, user: discord.Member, minutes: float = 1, *, reason: str = 'bad behavior, probably'):
+        try:
+            ismod = False
+            for role in context.message.author.roles:
+                if role.name == 'Mini Moderator':
+                    ismod = True
+            if not (context.message.author.guild_permissions.administrator or ismod):
+                return await context.channel.send('The wolf does not have the keys to the gun safe. But if he did, he would take on the authorities.')
+            self.db.timeouts.insert_one({"minutes":minutes, "reason":reason, "user":user.id, "timestamp":context.message.created_at})
+            await context.message.add_reaction('🧑‍⚖️')
+            await context.send(user.mention + ' has been JUDGED with `' + reason + '`!!!')
+            return await user.timeout(timedelta(seconds=minutes*60), reason=reason)
+
+        except Exception as e:
+            print(e)
+            await context.channel.send('ERROR: ' + str(e))
 
     @commands.command(name='kneecaps', aliases=['kc', 'kneecap', 'knees'])
     async def bust_kneecaps(self, context: commands.Context):
