@@ -28,9 +28,9 @@ class MiscCommands(Cog):
                 return await context.channel.send('Oh, you believe in freeing your fellow revolutionaries? cringe')
 
             self.db.timeouts.find_one_and_update(
-                {"user": user.id},  # Filter
-                {"$set": {"spared": True, "sparedReason":reason}},  # Update operator
-                sort=[("timestamp", -1)],  # Sort (list of tuples)
+                {"user": user.id},
+                {"$set": {"spared": True, "sparedReason":reason}},
+                sort=[("timestamp", -1)],
             )
 
             await context.message.add_reaction('😇')
