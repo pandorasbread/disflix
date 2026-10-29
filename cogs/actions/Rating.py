@@ -31,10 +31,12 @@ class Rating(BaseAction):
                     await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10.')
                     return
             except ValueError:
-                # If the value i
-                await msg.channel.send(
-                    f'Hey, you gotta put the rating then the movie name first bub. Ex `$rate 10 Your Mom`')
-                return
+                # If the value has an error, put possible reasons why
+                return await msg.channel.send(
+                    'Hey, I think you messed up bub. You either:\n'
+                    '* Put your Title in from of the rating. It should looke like `$rate 10 Your Mom`\n'
+                    '* Put a letter that wasn\'t "n" to add a movie. That would look like `$rate n1 Your Dad`\n'
+                    'Fix your command and come back!')
 
         # Get the User of the command
         check_user(self.db, msg.author)
