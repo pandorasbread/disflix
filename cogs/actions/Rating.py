@@ -1,9 +1,11 @@
 import discord
-from discord import Message
-from cogs.actions.BaseAction import BaseAction
+
 from cogs.actions.actionhelper import check_user
-from cogs.utils.inpututils import *
+from cogs.actions.BaseAction import BaseAction
 from cogs.utils import cogutils
+from cogs.utils.inpututils import *
+from datetime import datetime, time
+from discord import Message
 from schema.schema import *
 
 
@@ -12,12 +14,16 @@ class Rating(BaseAction):
         # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
         rating, title = rating_info.split(" ", maxsplit=1)
         delete_rating = False
+        add_movie = False
 
         # If rating is a 'x', set the rating to be deleted
         if rating == 'x':
             delete_rating = True
             rating: float = 0.0
         else:
+            if 'n' in rating:
+                add_movie = True
+                rating = str(rating).replace('n', '')
             try:
                 rating: float = round(float(rating), 2)
                 # Check to see if rating is between 0 and 10.0
@@ -35,8 +41,28 @@ class Rating(BaseAction):
         user: User = self.db.users.find_one({"username": msg.author.id})  # .get('_id')
         user_id = user['_id']
 
-        # Use the Title saves in the Movies table
-        full_title = self.db.movies.find_one({'title': clean_search(title)}).get('title')
+        # Use the Title saves in the Movies table. If the Movie 
+        title_search = self.db.movies.find_one({'title': clean_search(title)})
+        if title_search is None:
+            if add_movie == True:
+                if len(title) > 55:
+                    raise Exception('Movie names cannot be over 55 characters long.')
+                originator = msg.author.id
+                # Insert Movie into the Database
+                self.db.movies.insert_one(
+                    {"title": title, "originator": self.db.users.find_one({'username': originator}).get('_id'),
+                    'nominated': False})
+                # Put in a date of Today so it can be rated
+                watch_date: datetime = datetime.now()
+                self.db.movies.update_one({'title': clean_case(title)}, {'$set': {'last_win_date': watch_date}})
+
+                await msg.channel.send(f'{title} has been added to the Movie Database. It will have a watch date of {str(watch_date.date())} to allow rating')
+                await msg.add_reaction('✅')
+                full_title = title
+            else:
+                return await msg.channel.send(f'Movie {title} does not exist. To add the movie to the database with your rating, add a \'n\' to the rating. Ex. `$rate n8 New Movie`')
+        else:
+            full_title = title_search.get('title')
 
         if delete_rating:
             user_rating = next((x['rating'] for x in user['user_ratings'] if x['title'] == full_title), None)
@@ -56,8 +82,7 @@ class Rating(BaseAction):
 
         movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
         if movie is None:
-            await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
-            return
+            return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet.')
 
         # If already rated before, update the row. If not, add a new row.
         if self.db.users.count_documents({'_id': user_id, 'user_ratings.title': full_title}) != 0:
