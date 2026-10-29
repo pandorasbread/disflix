@@ -84,7 +84,8 @@ class Rating(BaseAction):
 
         movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
         if movie is None:
-            return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet.')
+            return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet. '
+                                          'Use the $hist command to add watch history to a movie.')
 
         # If already rated before, update the row. If not, add a new row.
         if self.db.users.count_documents({'_id': user_id, 'user_ratings.title': full_title}) != 0:
