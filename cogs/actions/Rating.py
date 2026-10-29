@@ -4,7 +4,7 @@ from cogs.actions.actionhelper import check_user
 from cogs.actions.BaseAction import BaseAction
 from cogs.utils import cogutils
 from cogs.utils.inpututils import *
-from datetime import datetime, time
+from datetime import datetime
 from discord import Message
 from schema.schema import *
 
