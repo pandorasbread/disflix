@@ -46,6 +46,8 @@ async def help(context):
     embed.description += '\n'
     embed.description += '## MOVIE RATING COMMANDS:\n'
     embed.description += '`$rate` `rating` `movie_name`: Records your rating (0-10) for a movie watched during movie night. Ex. `$rate 10 Star Wars: The Rise of Skywalker`\n'
+    embed.description += '-- Add the letter "n" to the rating number to add the movie to the database. Ex. `$rate n1 Bald Man Movie`\n'
+    embed.description += '-- Replace the rating with the letter "x" to delete the score entirely  Ex. `$rate x Sam Man Movie`\n'
     embed.description += '`$myratings`: Gets the list of all of Your ratings for movies. Add the "n" flag after to get list by Rating. Ex "$myratings n"\n'
     embed.description += '`$ratings` `movie_name`: Gets all and the average score for the provided movie name. Ex. `$ratings Jurassic Park`.\n'
     embed.description += '`$topratings`: Gives the Top 10 Movies scored by BUTTs based on Average review scores.\n'

@@ -1,9 +1,11 @@
 import discord
-from discord import Message
-from cogs.actions.BaseAction import BaseAction
+
 from cogs.actions.actionhelper import check_user
-from cogs.utils.inpututils import *
+from cogs.actions.BaseAction import BaseAction
 from cogs.utils import cogutils
+from cogs.utils.inpututils import *
+from datetime import datetime
+from discord import Message
 from schema.schema import *
 
 
@@ -12,12 +14,16 @@ class Rating(BaseAction):
         # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
         rating, title = rating_info.split(" ", maxsplit=1)
         delete_rating = False
+        force_rate = False
 
         # If rating is a 'x', set the rating to be deleted
         if rating == 'x':
             delete_rating = True
             rating: float = 0.0
         else:
+            if 'n' in rating:
+                force_rate = True
+                rating = str(rating).replace('n', '')
             try:
                 rating: float = round(float(rating), 2)
                 # Check to see if rating is between 0 and 10.0
@@ -25,18 +31,37 @@ class Rating(BaseAction):
                     await msg.channel.send(f'Rating {str(rating)} is not between 0 and 10.')
                     return
             except ValueError:
-                # If the value i
-                await msg.channel.send(
-                    f'Hey, you gotta put the rating then the movie name first bub. Ex `$rate 10 Your Mom`')
-                return
+                # If the value has an error, put possible reasons why
+                return await msg.channel.send(
+                    'Hey, I think you messed up bub. You either:\n'
+                    '* Put your Title in from of the rating. It should looke like `$rate 10 Your Mom`\n'
+                    '* Put a letter that wasn\'t "n" to add a movie. That would look like `$rate n1 Your Dad`\n'
+                    'Fix your command and come back!')
 
         # Get the User of the command
         check_user(self.db, msg.author)
         user: User = self.db.users.find_one({"username": msg.author.id})  # .get('_id')
         user_id = user['_id']
 
-        # Use the Title saves in the Movies table
-        full_title = self.db.movies.find_one({'title': clean_search(title)}).get('title')
+        # Use the Title saves in the Movies table. If the Movie 
+        title_search = self.db.movies.find_one({'title': clean_search(title)})
+        if title_search is None:
+            if force_rate == True:
+                if len(title) > 55:
+                    raise Exception('Movie names cannot be over 55 characters long.')
+                originator = msg.author.id
+                # Insert Movie into the Database
+                self.db.movies.insert_one(
+                    {"title": title, "originator": self.db.users.find_one({'username': originator}).get('_id'),
+                    'nominated': False})
+                await msg.add_reaction('👍')
+                full_title = title
+            else:
+                return await msg.channel.send(f'Movie {title} does not exist. To add the movie to the database with your rating, add a \'n\' to the rating. Ex. `$rate n8 New Movie`')
+        else:
+            if force_rate == True:
+                await msg.channel.send(f'Your Rating will be recorded, but will not show in the top ratings until watched for a movie night -BUTTSPLUG')
+            full_title = title_search.get('title')
 
         if delete_rating:
             user_rating = next((x['rating'] for x in user['user_ratings'] if x['title'] == full_title), None)
@@ -54,10 +79,12 @@ class Rating(BaseAction):
         if self.db.movies.count_documents({'title': clean_search(title)}) == 0:
             return await msg.channel.send(f'Movie {title} does not exist.')
 
-        movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
-        if movie is None:
-            await msg.channel.send(f'{full_title} has not been watched yet for Movie Night so it cannot be rated yet.')
-            return
+        # If not forcing a rating, search to see if the movie has been watched, and if not, return a message
+        if force_rate == False:
+            movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
+            if movie is None:
+                return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet. '
+                                               'Use the $hist command to add watch history to a movie if this is a mistake.')
 
         # If already rated before, update the row. If not, add a new row.
         if self.db.users.count_documents({'_id': user_id, 'user_ratings.title': full_title}) != 0:
@@ -107,7 +134,7 @@ class Rating(BaseAction):
 
         users_that_rated: list[User] = list(self.db.users.find({"user_ratings.title": movie['title']}))
         if len(users_that_rated) == 0:
-            return await msg.channel.send(f'Movie has not been rated.')
+            return await msg.channel.send(f'Movie {title} has not been rated.')
         # For each rating, get the username of the member who rated it and their rating per line.
         for rating in users_that_rated:
             username = rating['username']
@@ -128,7 +155,7 @@ class Rating(BaseAction):
         MAX_RATINGS = 10  # Current Max number of Top Movie ratings
         # Get the list of every distinct movie title in the `movieratings` table
         movies: list[Movie] = list(
-            self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}}))
+            self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}, 'last_win_date': {'$exists': True}}))
         movies.sort(key=lambda x: round(x['movie_rating']['sum'] / x['movie_rating']['count'], 2), reverse=True)
 
         def description_builder(mov):
