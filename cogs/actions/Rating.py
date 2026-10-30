@@ -54,17 +54,15 @@ class Rating(BaseAction):
                 self.db.movies.insert_one(
                     {"title": title, "originator": self.db.users.find_one({'username': originator}).get('_id'),
                     'nominated': False})
-                # Put in a date of Today so it can be rated
-                watch_date: datetime = datetime.now()
-                self.db.movies.update_one({'title': clean_case(title)}, {'$set': {'last_win_date': watch_date}})
-
-                await msg.channel.send(f'{title} has been added to the Movie Database. It will have a watch date of {str(watch_date.date())} to allow rating')
                 await msg.add_reaction('✅')
                 full_title = title
             else:
                 return await msg.channel.send(f'Movie {title} does not exist. To add the movie to the database with your rating, add a \'n\' to the rating. Ex. `$rate n8 New Movie`')
         else:
-            full_title = title_search.get('title')
+            if add_movie == True:
+                return await msg.channel.send(f'Trying to get around using the new movie flag huh? Watch the movie for a movie night to rate this movie, or else... -BUTTSPLUG')
+            else:
+                full_title = title_search.get('title')
 
         if delete_rating:
             user_rating = next((x['rating'] for x in user['user_ratings'] if x['title'] == full_title), None)
@@ -82,10 +80,15 @@ class Rating(BaseAction):
         if self.db.movies.count_documents({'title': clean_search(title)}) == 0:
             return await msg.channel.send(f'Movie {title} does not exist.')
 
+        # Allow a movie to be rated if it has not been watched, but give warning
         movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
         if movie is None:
-            return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet. '
-                                          'Use the $hist command to add watch history to a movie.')
+            if add_movie == False:
+                return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet. '
+                                               'Use the $hist command to add watch history to a movie.')
+            else:
+                await msg.channel.send(f'{full_title} is being added and rated by you, but be warned, it must be watched for a movie night '
+                                       'before anyone else can rate this movie. Signed, BUTTSPLUG')
 
         # If already rated before, update the row. If not, add a new row.
         if self.db.users.count_documents({'_id': user_id, 'user_ratings.title': full_title}) != 0:
@@ -156,7 +159,7 @@ class Rating(BaseAction):
         MAX_RATINGS = 10  # Current Max number of Top Movie ratings
         # Get the list of every distinct movie title in the `movieratings` table
         movies: list[Movie] = list(
-            self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}}))
+            self.db.movies.find({'movie_rating': {'$exists': True}, 'movie_rating.count': {'$gt': 0}, 'last_win_date': {'$exists': True}}))
         movies.sort(key=lambda x: round(x['movie_rating']['sum'] / x['movie_rating']['count'], 2), reverse=True)
 
         def description_builder(mov):
