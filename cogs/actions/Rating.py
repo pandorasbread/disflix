@@ -14,7 +14,7 @@ class Rating(BaseAction):
         # Split message into the rating and the Title ex 10 Jurassic Park makes rating 10 and title Jurassic Park
         rating, title = rating_info.split(" ", maxsplit=1)
         delete_rating = False
-        add_movie = False
+        force_rate = False
 
         # If rating is a 'x', set the rating to be deleted
         if rating == 'x':
@@ -22,7 +22,7 @@ class Rating(BaseAction):
             rating: float = 0.0
         else:
             if 'n' in rating:
-                add_movie = True
+                force_rate = True
                 rating = str(rating).replace('n', '')
             try:
                 rating: float = round(float(rating), 2)
@@ -46,7 +46,7 @@ class Rating(BaseAction):
         # Use the Title saves in the Movies table. If the Movie 
         title_search = self.db.movies.find_one({'title': clean_search(title)})
         if title_search is None:
-            if add_movie == True:
+            if force_rate == True:
                 if len(title) > 55:
                     raise Exception('Movie names cannot be over 55 characters long.')
                 originator = msg.author.id
@@ -54,12 +54,12 @@ class Rating(BaseAction):
                 self.db.movies.insert_one(
                     {"title": title, "originator": self.db.users.find_one({'username': originator}).get('_id'),
                     'nominated': False})
-                await msg.add_reaction('✅')
+                await msg.add_reaction('👍')
                 full_title = title
             else:
                 return await msg.channel.send(f'Movie {title} does not exist. To add the movie to the database with your rating, add a \'n\' to the rating. Ex. `$rate n8 New Movie`')
         else:
-            if add_movie == True:
+            if force_rate == True:
                 return await msg.channel.send(f'Trying to get around using the new movie flag huh? Watch the movie for a movie night to rate this movie, or else... -BUTTSPLUG')
             else:
                 full_title = title_search.get('title')
@@ -80,15 +80,12 @@ class Rating(BaseAction):
         if self.db.movies.count_documents({'title': clean_search(title)}) == 0:
             return await msg.channel.send(f'Movie {title} does not exist.')
 
-        # Allow a movie to be rated if it has not been watched, but give warning
-        movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
-        if movie is None:
-            if add_movie == False:
+        # If not forcing a rating, search to see if the movie has been watched, and if not, return a message
+        if force_rate == False:
+            movie = self.db.movies.find_one({'title': clean_search(title), 'last_win_date': {'$exists': True}})
+            if movie is None:
                 return await msg.channel.send(f'{full_title} has not been watched for Movie Night so it cannot be rated yet. '
-                                               'Use the $hist command to add watch history to a movie.')
-            else:
-                await msg.channel.send(f'{full_title} is being added and rated by you, but be warned, it must be watched for a movie night '
-                                       'before anyone else can rate this movie. Signed, BUTTSPLUG')
+                                               'Use the $hist command to add watch history to a movie if this is a mistake.')
 
         # If already rated before, update the row. If not, add a new row.
         if self.db.users.count_documents({'_id': user_id, 'user_ratings.title': full_title}) != 0:
