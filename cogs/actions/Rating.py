@@ -60,9 +60,8 @@ class Rating(BaseAction):
                 return await msg.channel.send(f'Movie {title} does not exist. To add the movie to the database with your rating, add a \'n\' to the rating. Ex. `$rate n8 New Movie`')
         else:
             if force_rate == True:
-                return await msg.channel.send(f'Trying to get around using the new movie flag huh? Watch the movie for a movie night to rate this movie, or else... -BUTTSPLUG')
-            else:
-                full_title = title_search.get('title')
+                await msg.channel.send(f'Your Rating will be recorded, but will not show in the top ratings until watched for a movie night -BUTTSPLUG')
+            full_title = title_search.get('title')
 
         if delete_rating:
             user_rating = next((x['rating'] for x in user['user_ratings'] if x['title'] == full_title), None)
@@ -135,7 +134,7 @@ class Rating(BaseAction):
 
         users_that_rated: list[User] = list(self.db.users.find({"user_ratings.title": movie['title']}))
         if len(users_that_rated) == 0:
-            return await msg.channel.send(f'Movie has not been rated.')
+            return await msg.channel.send(f'Movie {title} has not been rated.')
         # For each rating, get the username of the member who rated it and their rating per line.
         for rating in users_that_rated:
             username = rating['username']
